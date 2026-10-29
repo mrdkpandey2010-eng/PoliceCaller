@@ -1,7 +1,6 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { D1Database, LocalD1Database } from './db/d1-adapter';
-import { getDatabase, applyMigrations } from './db';
+import { D1Database } from './db/types';
 import { validateSession, AuthenticatedUser } from './services/auth';
 import { createAuthRouter } from './routes/auth';
 import { createDirectoryRouter } from './routes/directory';
@@ -25,6 +24,19 @@ export function createApp(dbInstance?: D1Database) {
     };
   }>();
 
+  const fallbackDb: D1Database = {
+    prepare(_query: string) {
+      return {
+        bind(..._values: any[]) { return this; },
+        async all() { return { results: [], success: true }; },
+        async first() { return null; },
+        async run() { return { success: true, meta: { changes: 0, last_row_id: 0 } }; },
+      };
+    },
+    async batch() { return []; },
+    async exec() { return { count: 0, duration: 0 }; },
+  };
+
   // CORS middleware
   app.use(
     '*',
@@ -37,7 +49,7 @@ export function createApp(dbInstance?: D1Database) {
 
   // Database resolution
   app.use('*', async (c, next) => {
-    const db = dbInstance || (c.env && c.env.DB ? c.env.DB : getDatabase());
+    const db = dbInstance || (c.env && c.env.DB ? c.env.DB : fallbackDb);
     c.set('db' as any, db);
     await next();
   });
@@ -86,7 +98,7 @@ export function createApp(dbInstance?: D1Database) {
   });
 
   // Mount routers
-  const targetDb = dbInstance || getDatabase();
+  const targetDb = dbInstance || fallbackDb;
 
   app.route('/api/auth', createAuthRouter(targetDb));
   app.route('/api/directory', createDirectoryRouter(targetDb));

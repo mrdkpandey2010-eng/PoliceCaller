@@ -1,6 +1,7 @@
 name = "police-directory-api"
 main = "src/index.ts"
 compatibility_date = "2026-02-01"
+compatibility_flags = ["nodejs_compat"]
 
 [vars]
 APP_ENV = "production"
@@ -8,11 +9,7 @@ APP_ENV = "production"
 [[d1_databases]]
 binding = "DB"
 database_name = "police_directory_prod"
-database_id = "PLACEHOLDER_CLOUDFLARE_D1_DATABASE_ID"
-
-[[r2_buckets]]
-binding = "BUCKET"
-bucket_name = "police-private-storage"
+database_id = "46cad7ca-da32-4b22-a271-6f2f55bc68a1"
 
 [triggers]
 crons = ["0 */6 * * *"]
