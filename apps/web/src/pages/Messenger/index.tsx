@@ -11,6 +11,7 @@ import {
   LogOut,
   Search,
   Check,
+  Trash2,
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -193,6 +194,31 @@ export const Messenger: React.FC<MessengerProps> = ({
     }
   };
 
+  const handleDeleteConversationForMe = async (
+    e: React.MouseEvent,
+    conversationId: string,
+    displayName: string
+  ) => {
+    e.stopPropagation();
+    if (
+      !window.confirm(
+        `Delete conversation "${displayName}" for you? (Messages will not be deleted for other participants).`
+      )
+    ) {
+      return;
+    }
+    try {
+      await api.deleteConversationForMe(conversationId);
+      if (activeConversation?.id === conversationId) {
+        setActiveConversation(null);
+        setMessages([]);
+      }
+      await fetchConversations();
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete conversation');
+    }
+  };
+
   const handleStartDirectChat = async (participantId: string) => {
     try {
       const res = await api.createConversation({
@@ -347,11 +373,23 @@ export const Messenger: React.FC<MessengerProps> = ({
                         {conv.lastMessageContent || 'No messages yet'}
                       </p>
                     </div>
-                    {conv.unreadCount > 0 && (
-                      <span className="w-5 h-5 rounded-full bg-[#147D84] text-white text-[10px] font-bold flex items-center justify-center shrink-0">
-                        {conv.unreadCount}
-                      </span>
-                    )}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {conv.unreadCount > 0 && (
+                        <span className="w-5 h-5 rounded-full bg-[#147D84] text-white text-[10px] font-bold flex items-center justify-center">
+                          {conv.unreadCount}
+                        </span>
+                      )}
+                      <button
+                        onClick={(e) =>
+                          handleDeleteConversationForMe(e, conv.id, conv.displayName || 'Chat')
+                        }
+                        aria-label={`Delete conversation ${conv.displayName} for me`}
+                        title="Delete for me"
+                        className="p-1.5 text-slate-400 hover:text-red-500 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 );
               })

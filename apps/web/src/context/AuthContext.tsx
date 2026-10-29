@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { api } from '../services/api';
+import { offlineStore } from '../services/offlineStore';
 import { User, Role } from '@police-directory/shared';
 
 interface AuthContextType {
@@ -8,7 +9,7 @@ interface AuthContextType {
   loading: boolean;
   needsTermsAcceptance: boolean;
   showNotificationPrompt: boolean;
-  login: (credentials: { pno: string; password: string }) => Promise<void>;
+  login: (credentials: { pno?: string; mobile?: string; identifier?: string; password: string }) => Promise<void>;
   register: (userData: any) => Promise<{ message: string }>;
   logout: () => Promise<void>;
   acceptCurrentTerms: () => Promise<void>;
@@ -61,7 +62,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     loadUser();
   }, [token]);
 
-  const login = async (credentials: { pno: string; password: string }) => {
+  const login = async (credentials: { pno?: string; mobile?: string; identifier?: string; password: string }) => {
     setLoading(true);
     try {
       const res = await api.login(credentials);
@@ -92,6 +93,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.removeItem('police_auth_token');
       // Purge cached offline items on logout
       sessionStorage.clear();
+      await offlineStore.purgeOfflineData().catch(() => {});
       setToken(null);
       setUser(null);
       setNeedsTermsAcceptance(false);

@@ -379,6 +379,34 @@ export function createChatRouter(db: D1Database) {
     return c.json({ success: true, message: 'Message deleted for you.' });
   });
 
+  // POST /api/chat/conversations/:conversationId/delete-for-me
+  // Hides all prior messages in the conversation for the current user without affecting other participants
+  router.post('/conversations/:conversationId/delete-for-me', async (c) => {
+    const user = c.get('user');
+    if (!user) return c.json({ error: 'Unauthorized' }, 401);
+
+    const convId = c.req.param('conversationId');
+    const now = new Date().toISOString();
+
+    const msgs = await db
+      .prepare('SELECT id FROM messages WHERE conversation_id = ?')
+      .bind(convId)
+      .all<any>();
+
+    for (const m of msgs.results) {
+      await db
+        .prepare(
+          `INSERT INTO user_message_visibility (id, user_id, message_id, is_hidden, hidden_at)
+           VALUES (?, ?, ?, 1, ?)
+           ON CONFLICT(user_id, message_id) DO UPDATE SET is_hidden = 1, hidden_at = excluded.hidden_at`
+        )
+        .bind(`vis_${crypto.randomUUID()}`, user.id, m.id, now)
+        .run();
+    }
+
+    return c.json({ success: true, message: 'Conversation cleared for you.' });
+  });
+
   // POST /api/chat/presence/heartbeat - Realtime presence heartbeat
   router.post('/presence/heartbeat', async (c) => {
     const user = c.get('user');

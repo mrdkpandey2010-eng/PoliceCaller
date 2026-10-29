@@ -28,7 +28,10 @@ async function request<T = any>(endpoint: string, options: RequestInit = {}): Pr
 
 export const api = {
   // Auth
-  login: (credentials: { pno: string; password: string }) =>
+  lookupIdentifier: (identifier: string) =>
+    request('/auth/lookup', { method: 'POST', body: JSON.stringify({ identifier }) }),
+
+  login: (credentials: { pno?: string; mobile?: string; identifier?: string; password: string }) =>
     request('/auth/login', { method: 'POST', body: JSON.stringify(credentials) }),
 
   register: (userData: any) =>
@@ -75,6 +78,9 @@ export const api = {
 
   deleteForMe: (messageId: string) =>
     request(`/chat/messages/${messageId}/delete-for-me`, { method: 'POST' }),
+
+  deleteConversationForMe: (conversationId: string) =>
+    request(`/chat/conversations/${conversationId}/delete-for-me`, { method: 'POST' }),
 
   pingPresence: () => request('/chat/presence/heartbeat', { method: 'POST' }),
 
@@ -128,6 +134,9 @@ export const api = {
 
   setUserStatus: (userId: string, status: 'ACTIVE' | 'INACTIVE') =>
     request(`/admin/users/${userId}/status`, { method: 'POST', body: JSON.stringify({ status }) }),
+
+  updateUserDetails: (userId: string, data: { fullName?: string; mobile?: string; designationId?: string; whatsapp?: string; email?: string }) =>
+    request(`/admin/users/${userId}/details`, { method: 'PUT', body: JSON.stringify(data) }),
 
   resetUserPassword: (userId: string, newPassword?: string) =>
     request(`/admin/users/${userId}/reset-password`, { method: 'POST', body: JSON.stringify({ newPassword }) }),

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { MessageSquare, Copy, Check, Star } from 'lucide-react';
+import { MessageSquare, Copy, Check, Star, Phone } from 'lucide-react';
 import { Avatar } from './Avatar';
 import { Button } from './Button';
 
@@ -105,6 +105,7 @@ export const ContactRow: React.FC<ContactRowProps> = ({
           </Button>
         )}
 
+        {/* Message Icon: Opens Departmental Chat */}
         <Button
           variant="primary"
           size="icon"
@@ -117,6 +118,17 @@ export const ContactRow: React.FC<ContactRowProps> = ({
         >
           <MessageSquare className="w-4 h-4" />
         </Button>
+
+        {/* Call Icon: Native OS Phone Dialer Handoff */}
+        <a
+          href={`tel:${contact.mobile}`}
+          onClick={(e) => e.stopPropagation()}
+          aria-label={`Call ${contact.fullName} via phone dialer`}
+          title={`Call ${contact.mobile} via phone dialer`}
+          className="w-10 h-10 min-w-[40px] min-h-[40px] rounded-full bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center shadow-sm transition-colors"
+        >
+          <Phone className="w-4 h-4" />
+        </a>
       </div>
     </div>
   );

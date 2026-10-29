@@ -8,9 +8,10 @@ import { RegisterSchema } from '@police-directory/shared';
 
 export interface RegisterProps {
   onNavigateToLogin: () => void;
+  initialIdentifier?: string;
 }
 
-export const Register: React.FC<RegisterProps> = ({ onNavigateToLogin }) => {
+export const Register: React.FC<RegisterProps> = ({ onNavigateToLogin, initialIdentifier }) => {
   const { register } = useAuth();
   const { language } = useLanguage();
 
@@ -19,16 +20,26 @@ export const Register: React.FC<RegisterProps> = ({ onNavigateToLogin }) => {
   const [designations, setDesignations] = useState<any[]>([]);
 
   const [formData, setFormData] = useState({
-    pno: '',
+    pno: initialIdentifier && initialIdentifier.length !== 10 ? initialIdentifier : '',
     fullName: '',
     designationId: '',
     districtId: '',
     stationOfficeId: '',
-    mobile: '',
+    mobile: initialIdentifier && initialIdentifier.length === 10 ? initialIdentifier : '',
     whatsapp: '',
     email: '',
     password: '',
   });
+
+  useEffect(() => {
+    if (initialIdentifier) {
+      if (initialIdentifier.length === 10) {
+        setFormData((prev) => ({ ...prev, mobile: initialIdentifier }));
+      } else {
+        setFormData((prev) => ({ ...prev, pno: initialIdentifier }));
+      }
+    }
+  }, [initialIdentifier]);
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [generalError, setGeneralError] = useState<string | null>(null);

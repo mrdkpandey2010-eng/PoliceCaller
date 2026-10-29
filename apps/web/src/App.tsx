@@ -29,6 +29,7 @@ export const AppContent: React.FC = () => {
   const { isDarkMode, toggleTheme } = useTheme();
 
   const [authView, setAuthView] = useState<'login' | 'register'>('login');
+  const [prefilledIdentifier, setPrefilledIdentifier] = useState('');
   const [activeTab, setActiveTab] = useState<NavTab>('directory');
   const [targetChatUserId, setTargetChatUserId] = useState<string | null>(null);
 
@@ -48,9 +49,21 @@ export const AppContent: React.FC = () => {
   // Unauthenticated Flow
   if (!user) {
     if (authView === 'register') {
-      return <Register onNavigateToLogin={() => setAuthView('login')} />;
+      return (
+        <Register
+          initialIdentifier={prefilledIdentifier}
+          onNavigateToLogin={() => setAuthView('login')}
+        />
+      );
     }
-    return <Login onNavigateToRegister={() => setAuthView('register')} />;
+    return (
+      <Login
+        onNavigateToRegister={(id) => {
+          setPrefilledIdentifier(id || '');
+          setAuthView('register');
+        }}
+      />
+    );
   }
 
   const isAdmin = user.role === ROLES.SUPER_ADMIN || user.role === ROLES.DISTRICT_CO_ADMIN;

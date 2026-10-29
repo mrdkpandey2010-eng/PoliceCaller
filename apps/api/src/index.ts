@@ -59,6 +59,7 @@ export function createApp(dbInstance?: D1Database) {
     const path = c.req.path;
     const publicPaths = [
       '/api/health',
+      '/api/auth/lookup',
       '/api/auth/login',
       '/api/auth/register',
       '/api/masters/districts',

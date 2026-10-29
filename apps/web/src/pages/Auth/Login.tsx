@@ -1,30 +1,74 @@
 import React, { useState } from 'react';
 import { Button, Input, Card } from '@police-directory/ui';
-import { Shield, Lock, UserCheck, AlertCircle } from 'lucide-react';
+import { Shield, Lock, ArrowLeft, ArrowRight, Eye, EyeOff, AlertCircle, Clock, UserX } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
+import { api } from '../../services/api';
 
 export interface LoginProps {
-  onNavigateToRegister: () => void;
+  onNavigateToRegister: (initialIdentifier?: string) => void;
 }
 
 export const Login: React.FC<LoginProps> = ({ onNavigateToRegister }) => {
   const { login } = useAuth();
-  const { language, t } = useLanguage();
+  const { language } = useLanguage();
 
-  const [pno, setPno] = useState('');
+  // Stage: 'identifier' | 'password'
+  const [stage, setStage] = useState<'identifier' | 'password'>('identifier');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [matchedUser, setMatchedUser] = useState<any | null>(null);
+
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Step 1: Identifier lookup
+  const handleIdentifierSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    if (!pno.trim()) {
-      setError(language === 'hi' ? 'कृपया PNO दर्ज करें' : 'Please enter your PNO');
+    const cleanId = identifier.trim();
+    if (!cleanId) {
+      setError(
+        language === 'hi'
+          ? 'कृपया अपना PNO या 10-अंकों का मोबाइल नंबर दर्ज करें'
+          : 'Please enter your PNO or 10-digit Mobile Number'
+      );
       return;
     }
+
+    if (!/^\d+$/.test(cleanId)) {
+      setError(
+        language === 'hi'
+          ? 'PNO / मोबाइल नंबर केवल अंकों में होना चाहिए'
+          : 'Identifier must contain digits only'
+      );
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await api.lookupIdentifier(cleanId);
+      if (res.exists) {
+        setMatchedUser(res);
+        setStage('password');
+      } else {
+        // Not registered: navigate directly to English-only registration form
+        onNavigateToRegister(cleanId);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Lookup failed. Please verify connection.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Step 2: Password submission
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
     if (!password) {
       setError(language === 'hi' ? 'कृपया पासवर्ड दर्ज करें' : 'Please enter your password');
       return;
@@ -32,9 +76,13 @@ export const Login: React.FC<LoginProps> = ({ onNavigateToRegister }) => {
 
     setLoading(true);
     try {
-      await login({ pno: pno.trim(), password });
+      await login({
+        pno: matchedUser?.pno || identifier.trim(),
+        identifier: identifier.trim(),
+        password,
+      });
     } catch (err: any) {
-      setError(err.message || 'Login failed. Please verify credentials.');
+      setError(err.message || 'Authentication failed. Please check your credentials.');
     } finally {
       setLoading(false);
     }
@@ -58,65 +106,160 @@ export const Login: React.FC<LoginProps> = ({ onNavigateToRegister }) => {
           </p>
         </div>
 
-        <Card className="p-6 sm:p-8 shadow-xl border-slate-200/90 dark:border-slate-800 rounded-3xl">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-1">
-              {t('auth.loginTitle')}
-            </h2>
-
-            {error && (
-              <div className="p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 rounded-xl flex items-start gap-2.5 text-xs text-red-700 dark:text-red-300">
-                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                <span className="leading-relaxed font-medium">{error}</span>
+        <Card className="p-6 sm:p-8 shadow-xl border-slate-200/80 dark:border-slate-800">
+          {stage === 'identifier' ? (
+            // Screen 1A: Identifier Input
+            <form onSubmit={handleIdentifierSubmit} className="space-y-5">
+              <div>
+                <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                  {language === 'hi' ? 'सुरक्षित पोर्टल लॉगिन' : 'Portal Authentication'}
+                </h2>
+                <p className="text-xs text-slate-500 mt-1">
+                  {language === 'hi'
+                    ? 'जारी रखने के लिए अपना 8-अंकों का PNO या पंजीकृत मोबाइल नंबर दर्ज करें'
+                    : 'Enter your 8-digit PNO or registered Mobile Number to proceed'}
+                </p>
               </div>
-            )}
 
-            <Input
-              label={t('auth.pnoLabel')}
-              value={pno}
-              onChange={(e) => setPno(e.target.value)}
-              placeholder="e.g. 00123456"
-              maxLength={12}
-              autoComplete="username"
-              required
-            />
+              {error && (
+                <div className="p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 rounded-xl text-xs text-red-700 dark:text-red-300 flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{error}</span>
+                </div>
+              )}
 
-            <Input
-              label={t('auth.passwordLabel')}
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              autoComplete="current-password"
-              required
-            />
+              <Input
+                label={language === 'hi' ? 'PNO / मोबाइल नंबर' : 'PNO / Mobile Number'}
+                value={identifier}
+                onChange={(e) => {
+                  // ASCII digits only
+                  const val = e.target.value.replace(/\D/g, '');
+                  setIdentifier(val);
+                }}
+                placeholder="e.g. 00000001 or 9876543210"
+                maxLength={10}
+                required
+                autoFocus
+              />
 
-            <Button
-              type="submit"
-              variant="primary"
-              loading={loading}
-              aria-label="Login to directory"
-              className="w-full mt-2 font-bold bg-[#17324F] hover:bg-[#10243B] text-white shadow-md rounded-xl"
-            >
-              {t('auth.loginBtn')}
-            </Button>
-          </form>
+              <Button
+                type="submit"
+                variant="primary"
+                loading={loading}
+                aria-label="Continue to authentication"
+                className="w-full bg-[#17324F] hover:bg-[#10243B] font-bold py-2.5 rounded-xl shadow-md"
+              >
+                <span>{language === 'hi' ? 'आगे बढ़ें' : 'Continue'}</span>
+                <ArrowRight className="w-4 h-4 ml-1 inline" />
+              </Button>
 
-          <div className="mt-6 pt-5 border-t border-slate-100 dark:border-slate-800 text-center">
-            <button
-              type="button"
-              onClick={onNavigateToRegister}
-              className="text-xs font-semibold text-[#147D84] hover:text-teal-700 dark:text-teal-400 dark:hover:text-teal-300 transition-colors"
-            >
-              {t('auth.registerLink')}
-            </button>
-          </div>
+              <div className="text-center pt-2">
+                <button
+                  type="button"
+                  onClick={() => onNavigateToRegister()}
+                  className="text-xs font-semibold text-[#147D84] hover:underline"
+                >
+                  {language === 'hi'
+                    ? 'नया पुलिस कर्मी? नया पंजीकरण करें'
+                    : 'New Police Personnel? Register here'}
+                </button>
+              </div>
+            </form>
+          ) : (
+            // Screen 1B: Password Verification
+            <form onSubmit={handlePasswordSubmit} className="space-y-5">
+              <div className="flex items-center justify-between pb-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStage('identifier');
+                    setError(null);
+                  }}
+                  className="text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 flex items-center gap-1"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span>{language === 'hi' ? 'पहचान बदलें' : 'Change ID'}</span>
+                </button>
+                <span className="text-[11px] font-mono font-bold px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded-md text-slate-700 dark:text-slate-300">
+                  {identifier}
+                </span>
+              </div>
+
+              {matchedUser && (
+                <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700">
+                  <h3 className="text-xs font-bold text-slate-900 dark:text-white">
+                    {matchedUser.fullName}
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    {matchedUser.designationName || 'Officer'} • {matchedUser.districtName || 'UP'}
+                  </p>
+                </div>
+              )}
+
+              {/* Status Alerts */}
+              {matchedUser?.status === 'PENDING' && (
+                <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl text-xs text-amber-800 dark:text-amber-200 flex items-start gap-2">
+                  <Clock className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
+                  <span>
+                    {language === 'hi'
+                      ? 'आपका खाता विभागीय व्यवस्थापक द्वारा अनुमोदन हेतु लंबित है।'
+                      : 'Your account is pending departmental admin approval.'}
+                  </span>
+                </div>
+              )}
+
+              {matchedUser?.status === 'INACTIVE' && (
+                <div className="p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 rounded-xl text-xs text-red-800 dark:text-red-200 flex items-start gap-2">
+                  <UserX className="w-4 h-4 shrink-0 mt-0.5 text-red-600" />
+                  <span>
+                    {language === 'hi'
+                      ? 'खाता निष्क्रिय है। कृपया जिला व्यवस्थापक से संपर्क करें।'
+                      : 'Account is inactive. Please contact your District Co-Admin.'}
+                  </span>
+                </div>
+              )}
+
+              {error && (
+                <div className="p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 rounded-xl text-xs text-red-700 dark:text-red-300 flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{error}</span>
+                </div>
+              )}
+
+              <div className="relative">
+                <Input
+                  label={language === 'hi' ? 'पासवर्ड दर्ज करें' : 'Enter Password'}
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••••••"
+                  required
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  className="absolute right-3 top-8 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+
+              <Button
+                type="submit"
+                variant="primary"
+                loading={loading}
+                disabled={matchedUser?.status === 'PENDING' || matchedUser?.status === 'INACTIVE'}
+                aria-label="Confirm login"
+                className="w-full bg-[#17324F] hover:bg-[#10243B] font-bold py-2.5 rounded-xl shadow-md"
+              >
+                <Lock className="w-4 h-4 mr-1 inline" />
+                <span>{language === 'hi' ? 'लॉगिन करें' : 'Log In'}</span>
+              </Button>
+            </form>
+          )}
         </Card>
-
-        {/* English-Only Policy Footer Notice */}
-        <p className="text-[11px] text-center text-slate-500 dark:text-slate-400 mt-4 px-4 leading-relaxed">
-          {t('auth.englishOnlyNotice')}
-        </p>
       </div>
     </div>
   );

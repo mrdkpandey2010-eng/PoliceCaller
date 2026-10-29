@@ -14,6 +14,8 @@ import {
   KeyRound,
   Download,
   RotateCcw,
+  Search,
+  Edit2,
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -40,6 +42,16 @@ export const AdminDashboard: React.FC = () => {
   const [newPasswordInput, setNewPasswordInput] = useState('');
   const [resetSuccessMessage, setResetSuccessMessage] = useState<string | null>(null);
 
+  // Edit user details modal state
+  const [editingUser, setEditingUser] = useState<any | null>(null);
+  const [editFullName, setEditFullName] = useState('');
+  const [editMobile, setEditMobile] = useState('');
+  const [editDesignationId, setEditDesignationId] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [designations, setDesignations] = useState<any[]>([]);
+  const [editSaving, setEditSaving] = useState(false);
+  const [userSearchQuery, setUserSearchQuery] = useState('');
+
   const fetchOverview = async () => {
     setLoading(true);
     try {
@@ -63,8 +75,14 @@ export const AdminDashboard: React.FC = () => {
         const res = await api.getPendingUsers();
         setPendingUsers(res.pendingUsers || []);
       } else if (tab === 'users') {
-        const res = await api.getUsers();
-        setUsersList(res.users || []);
+        const [usersRes, desigRes] = await Promise.all([
+          api.getUsers(),
+          designations.length === 0 ? api.getDesignations() : Promise.resolve({ designations }),
+        ]);
+        setUsersList(usersRes.users || []);
+        if (desigRes?.designations) {
+          setDesignations(desigRes.designations);
+        }
       } else if (tab === 'transfers') {
         const res = await api.getTransfers();
         setTransfers(res.transfers || []);
@@ -109,6 +127,55 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
+  const handleOpenEditModal = (u: any) => {
+    setEditingUser(u);
+    setEditFullName(u.fullName || '');
+    setEditMobile(u.mobile || '');
+    setEditDesignationId(u.designationId || '');
+    setEditEmail(u.email || '');
+  };
+
+  const handleSaveUserDetails = async () => {
+    if (!editingUser) return;
+    if (!/^[a-zA-Z\s.]+$/.test(editFullName.trim())) {
+      alert('Full Name must contain English letters only.');
+      return;
+    }
+    if (!/^[6-9]\d{9}$/.test(editMobile.trim())) {
+      alert('Mobile Number must be a valid 10-digit Indian mobile number.');
+      return;
+    }
+    setEditSaving(true);
+    try {
+      await api.updateUserDetails(editingUser.id, {
+        fullName: editFullName.trim(),
+        mobile: editMobile.trim(),
+        designationId: editDesignationId || undefined,
+        email: editEmail.trim() || undefined,
+      });
+      const targetDesig = designations.find((d) => d.id === editDesignationId);
+      setUsersList((prev) =>
+        prev.map((u) =>
+          u.id === editingUser.id
+            ? {
+                ...u,
+                fullName: editFullName.trim(),
+                mobile: editMobile.trim(),
+                designationId: editDesignationId,
+                designationName: targetDesig ? targetDesig.nameEn : u.designationName,
+                email: editEmail.trim() || u.email,
+              }
+            : u
+        )
+      );
+      setEditingUser(null);
+    } catch (err: any) {
+      alert(err.message || 'Failed to update user details');
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
   const handleReviewTransfer = async (transferId: string, action: 'APPROVE' | 'REJECT') => {
     try {
       await api.reviewTransfer({ transferId, action });
@@ -141,6 +208,18 @@ export const AdminDashboard: React.FC = () => {
       alert(err.message || 'Reset password failed');
     }
   };
+
+  const filteredUsers = usersList.filter((u) => {
+    if (!userSearchQuery.trim()) return true;
+    const q = userSearchQuery.toLowerCase();
+    return (
+      u.pno?.toLowerCase().includes(q) ||
+      u.fullName?.toLowerCase().includes(q) ||
+      u.mobile?.toLowerCase().includes(q) ||
+      u.designationName?.toLowerCase().includes(q) ||
+      u.stationOfficeName?.toLowerCase().includes(q)
+    );
+  });
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-4 pb-24 md:pb-8 space-y-6">
@@ -366,9 +445,21 @@ export const AdminDashboard: React.FC = () => {
       {/* Tab: Users Management */}
       {activeTab === 'users' && (
         <div className="space-y-3">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-            Personnel Directory Administration
-          </h3>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+              Personnel Directory Administration ({filteredUsers.length} records)
+            </h3>
+            <div className="relative w-full sm:w-72">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Search by PNO, Name, Mobile..."
+                value={userSearchQuery}
+                onChange={(e) => setUserSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#147D84]"
+              />
+            </div>
+          </div>
           <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-2xl bg-white dark:bg-slate-900">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 dark:bg-slate-800/80 text-[11px] font-bold text-slate-500 uppercase">
@@ -383,7 +474,7 @@ export const AdminDashboard: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {usersList.map((u) => (
+                {filteredUsers.map((u) => (
                   <tr key={u.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
                     <td className="p-3 font-mono font-bold text-slate-800 dark:text-slate-200">
                       {u.pno}
@@ -406,6 +497,15 @@ export const AdminDashboard: React.FC = () => {
                       </Badge>
                     </td>
                     <td className="p-3 text-right space-x-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleOpenEditModal(u)}
+                        aria-label={`Edit details for ${u.fullName}`}
+                        className="text-[11px] px-2 py-1"
+                      >
+                        Edit
+                      </Button>
                       <Button
                         variant="outline"
                         size="sm"
@@ -602,6 +702,91 @@ export const AdminDashboard: React.FC = () => {
               />
             </>
           )}
+        </div>
+      </Modal>
+
+      {/* Edit User Details Modal */}
+      <Modal
+        isOpen={Boolean(editingUser)}
+        onClose={() => setEditingUser(null)}
+        title={`Edit Personnel Details (PNO: ${editingUser?.pno})`}
+        maxWidth="md"
+        footer={
+          <div className="flex items-center justify-end gap-2 w-full">
+            <Button
+              variant="ghost"
+              onClick={() => setEditingUser(null)}
+              disabled={editSaving}
+              aria-label="Cancel editing"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleSaveUserDetails}
+              disabled={editSaving || !editFullName.trim() || !editMobile.trim()}
+              aria-label="Save user details"
+              className="bg-[#17324F] font-bold"
+            >
+              {editSaving ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl text-xs text-amber-900 dark:text-amber-200">
+            <strong>Immutable Identifier:</strong> PNO (<code>{editingUser?.pno}</code>) is permanent and cannot be modified.
+          </div>
+
+          <div>
+            <Input
+              label="Full Name (English letters only) *"
+              value={editFullName}
+              onChange={(e) => setEditFullName(e.target.value)}
+              placeholder="e.g. Inspector Ramesh Kumar"
+              englishOnlyNotice
+              required
+            />
+          </div>
+
+          <div>
+            <Input
+              label="Mobile Number (10 digits) *"
+              value={editMobile}
+              onChange={(e) => setEditMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
+              placeholder="9876543210"
+              maxLength={10}
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              Designation / Rank
+            </label>
+            <select
+              value={editDesignationId}
+              onChange={(e) => setEditDesignationId(e.target.value)}
+              className="w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border text-sm transition-colors duration-150 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#17324F]"
+            >
+              <option value="">Select Designation...</option>
+              {designations.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.nameEn} ({d.cadre})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <Input
+              label="Official Email (Optional)"
+              type="email"
+              value={editEmail}
+              onChange={(e) => setEditEmail(e.target.value)}
+              placeholder="officer@uppolice.gov.in"
+            />
+          </div>
         </div>
       </Modal>
     </div>

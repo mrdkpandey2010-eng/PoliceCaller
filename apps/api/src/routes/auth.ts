@@ -23,6 +23,68 @@ export function createAuthRouter(db: D1Database) {
     };
   }>();
 
+  // POST /api/auth/lookup (Screen 1: PNO/Mobile identifier check)
+  router.post('/lookup', async (c) => {
+    try {
+      const body = await c.req.json().catch(() => ({}));
+      const identifier = String(body.identifier || '').trim();
+
+      if (!identifier || !/^\d+$/.test(identifier)) {
+        return c.json({ error: 'Please enter a valid numeric PNO or Mobile Number.' }, 400);
+      }
+
+      // Safe lookup by PNO or Mobile
+      const matchingUsers = await db
+        .prepare(
+          `SELECT u.id, u.pno, u.mobile, u.status, u.full_name, u.photo_url, u.role,
+                  d.name as district_name, des.name as designation_name
+           FROM users u
+           LEFT JOIN districts d ON u.district_id = d.id
+           LEFT JOIN designations des ON u.designation_id = des.id
+           WHERE u.pno = ? OR u.mobile = ?`
+        )
+        .bind(identifier, identifier)
+        .all<any>();
+
+      if (matchingUsers.results.length === 0) {
+        return c.json({
+          exists: false,
+          typedIdentifier: identifier,
+          suggestedType: identifier.length === 10 ? 'mobile' : 'pno',
+        });
+      }
+
+      if (matchingUsers.results.length === 1) {
+        const u = matchingUsers.results[0];
+        return c.json({
+          exists: true,
+          pno: u.pno,
+          fullName: u.full_name,
+          status: u.status,
+          designationName: u.designation_name,
+          districtName: u.district_name,
+          photoUrl: u.photo_url,
+          maskedMobile: u.mobile ? '******' + u.mobile.slice(-4) : null,
+        });
+      }
+
+      // If mobile is shared across multiple accounts, provide safe disambiguation
+      return c.json({
+        exists: true,
+        multipleMatches: true,
+        accounts: matchingUsers.results.map((u: any) => ({
+          pno: u.pno,
+          fullName: u.full_name,
+          status: u.status,
+          designationName: u.designation_name,
+          districtName: u.district_name,
+        })),
+      });
+    } catch (err: any) {
+      return c.json({ error: err.message || 'Lookup failed.' }, 400);
+    }
+  });
+
   // POST /api/auth/register (USER self-registration)
   router.post('/register', async (c) => {
     try {
@@ -116,7 +178,12 @@ export function createAuthRouter(db: D1Database) {
   router.post('/login', async (c) => {
     try {
       const body = await c.req.json();
-      const { pno, password } = LoginSchema.parse(body);
+      const identifier = String(body.pno || body.identifier || body.mobile || '').trim();
+      const password = String(body.password || '');
+
+      if (!identifier || !password) {
+        return c.json({ error: 'PNO/Mobile and password are required.' }, 400);
+      }
 
       const user = await db
         .prepare(
@@ -124,18 +191,28 @@ export function createAuthRouter(db: D1Database) {
            FROM users u
            LEFT JOIN districts d ON u.district_id = d.id
            LEFT JOIN stations_offices s ON u.station_office_id = s.id
-           WHERE u.pno = ?`
+           WHERE u.pno = ? OR u.mobile = ?`
         )
-        .bind(pno)
+        .bind(identifier, identifier)
         .first<any>();
 
       if (!user) {
-        return c.json({ error: 'Invalid PNO or password.' }, 401);
+        return c.json({ error: 'Invalid PNO/Mobile or password.' }, 401);
       }
 
       const isValidPassword = verifyPassword(password, user.password_hash);
       if (!isValidPassword) {
-        return c.json({ error: 'Invalid PNO or password.' }, 401);
+        return c.json({ error: 'Invalid PNO/Mobile or password.' }, 401);
+      }
+
+      if (user.status === 'PENDING') {
+        return c.json(
+          {
+            error: 'Account pending departmental admin approval.',
+            status: 'PENDING',
+          },
+          403
+        );
       }
 
       if (user.status === 'REJECTED' || user.status === 'INACTIVE') {

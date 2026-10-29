@@ -257,6 +257,72 @@ export function createAdminRouter(db: D1Database) {
     });
   });
 
+  // PUT /api/admin/users/:userId/details - Update structured user details (PNO immutable)
+  router.put('/users/:userId/details', async (c) => {
+    const user = c.get('user')!;
+    const targetUserId = c.req.param('userId');
+    const body = await c.req.json();
+    const { fullName, mobile, designationId, whatsapp, email } = body;
+
+    const target = await db
+      .prepare('SELECT id, pno, full_name, mobile, role, district_id, status FROM users WHERE id = ?')
+      .bind(targetUserId)
+      .first<any>();
+
+    if (!target) return c.json({ error: 'User not found' }, 404);
+
+    if (!RBAC.canEditUser(user, target.id, target.district_id)) {
+      return c.json({ error: 'Forbidden: You cannot modify users outside your assigned district.' }, 403);
+    }
+
+    if (fullName) {
+      if (!/^[A-Za-z][A-Za-z .'-]*[A-Za-z.]$/.test(fullName)) {
+        return c.json({ error: 'Name must contain English letters and valid characters only.' }, 422);
+      }
+    }
+
+    if (mobile) {
+      if (!/^[6-9]\d{9}$/.test(mobile)) {
+        return c.json({ error: 'Mobile must be a valid 10-digit Indian mobile number.' }, 422);
+      }
+    }
+
+    const now = new Date().toISOString();
+    await db
+      .prepare(
+        `UPDATE users 
+         SET full_name = IFNULL(?, full_name),
+             mobile = IFNULL(?, mobile),
+             designation_id = IFNULL(?, designation_id),
+             whatsapp = IFNULL(?, whatsapp),
+             email = IFNULL(?, email),
+             updated_at = ?
+         WHERE id = ?`
+      )
+      .bind(
+        fullName || null,
+        mobile || null,
+        designationId || null,
+        whatsapp || null,
+        email || null,
+        now,
+        targetUserId
+      )
+      .run();
+
+    await logAuditEvent(db, {
+      actor: user,
+      action: 'UPDATE_USER_DETAILS',
+      entityType: 'USER',
+      entityId: targetUserId,
+      districtScope: target.district_id,
+      beforeState: { fullName: target.full_name, mobile: target.mobile },
+      afterState: { fullName, mobile, designationId },
+    });
+
+    return c.json({ success: true, message: 'User details updated successfully.' });
+  });
+
   // POST /api/admin/users/:userId/reset-password - Single-use reset token or new password
   router.post('/users/:userId/reset-password', async (c) => {
     const user = c.get('user')!;
