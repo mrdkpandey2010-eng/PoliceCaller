@@ -1,0 +1,18 @@
+node_modules/
+dist/
+build/
+local_d1.sqlite
+local_d1.sqlite-shm
+local_d1.sqlite-wal
+*.log
+.env
+.DS_Store
+Thumbs.db
+
+# Android
+.gradle/
+android/.gradle/
+android/app/build/
+android/build/
+*.apk
+*.aab
