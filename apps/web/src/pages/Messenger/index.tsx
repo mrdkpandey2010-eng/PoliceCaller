@@ -1,6 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Avatar, ChatBubble, Button, Modal, Input } from '@police-directory/ui';
-import { Send, Users, ArrowLeft, Plus, MessageSquare } from 'lucide-react';
+import {
+  Send,
+  Users,
+  ArrowLeft,
+  Plus,
+  MessageSquare,
+  MessageSquarePlus,
+  Info,
+  LogOut,
+  Search,
+  Check,
+} from 'lucide-react';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
@@ -25,9 +36,22 @@ export const Messenger: React.FC<MessengerProps> = ({
   const [loadingMsg, setLoadingMsg] = useState(false);
   const [sending, setSending] = useState(false);
 
-  // New Group Modal
+  // Modals
+  const [showNewDirectModal, setShowNewDirectModal] = useState(false);
   const [showNewGroupModal, setShowNewGroupModal] = useState(false);
+  const [showGroupInfoModal, setShowGroupInfoModal] = useState(false);
+  const [groupMembers, setGroupMembers] = useState<any[]>([]);
+
+  // Directory contacts for picker
+  const [contacts, setContacts] = useState<any[]>([]);
+  const [contactSearch, setContactSearch] = useState('');
   const [newGroupTitle, setNewGroupTitle] = useState('');
+  const [selectedGroupMemberIds, setSelectedGroupMemberIds] = useState<string[]>([]);
+
+  // Presence & Typing state
+  const [isCounterpartyOnline, setIsCounterpartyOnline] = useState<boolean | null>(null);
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
+  const lastTypingBroadcastRef = useRef<number>(0);
 
   const fetchConversations = async () => {
     try {
@@ -40,7 +64,35 @@ export const Messenger: React.FC<MessengerProps> = ({
 
   useEffect(() => {
     fetchConversations();
+    // Heartbeat for presence
+    api.pingPresence().catch(() => {});
+    const heartbeatTimer = setInterval(() => {
+      api.pingPresence().catch(() => {});
+    }, 25000);
+    return () => clearInterval(heartbeatTimer);
   }, []);
+
+  // Keyboard Escape listener to go back
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && activeConversation) {
+        setActiveConversation(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeConversation]);
+
+  // Load directory contacts for new chat / new group modals
+  useEffect(() => {
+    if (showNewDirectModal || showNewGroupModal) {
+      api.getContacts({ limit: 100 }).then((res) => {
+        // Exclude current user from contact picker
+        const filtered = (res.contacts || []).filter((c: any) => c.id !== user?.id);
+        setContacts(filtered);
+      }).catch(() => {});
+    }
+  }, [showNewDirectModal, showNewGroupModal, user?.id]);
 
   // Handle open conversation if initialRecipientId provided
   useEffect(() => {
@@ -54,7 +106,7 @@ export const Messenger: React.FC<MessengerProps> = ({
     }
   }, [initialRecipientId]);
 
-  // Fetch messages when active conversation changes
+  // Fetch messages and presence when active conversation changes
   useEffect(() => {
     if (activeConversation?.id) {
       setLoadingMsg(true);
@@ -66,8 +118,49 @@ export const Messenger: React.FC<MessengerProps> = ({
         .finally(() => {
           setLoadingMsg(false);
         });
+
+      // If group, load members
+      if (activeConversation.type === 'GROUP') {
+        api.getConversationMembers(activeConversation.id).then((res) => {
+          setGroupMembers(res.members || []);
+        }).catch(() => {});
+      } else if (activeConversation.counterpartyId) {
+        api.getUserPresence(activeConversation.counterpartyId).then((res) => {
+          setIsCounterpartyOnline(res.isOnline);
+        }).catch(() => {});
+      }
     }
   }, [activeConversation?.id]);
+
+  // Poll typing indicators and refresh messages periodically
+  useEffect(() => {
+    if (!activeConversation?.id) return;
+
+    const interval = setInterval(() => {
+      // Check typing
+      api.getTypingUsers(activeConversation.id).then((res) => {
+        setTypingUsers(res.typingUsers || []);
+      }).catch(() => {});
+
+      // Refresh presence if direct
+      if (activeConversation.counterpartyId) {
+        api.getUserPresence(activeConversation.counterpartyId).then((res) => {
+          setIsCounterpartyOnline(res.isOnline);
+        }).catch(() => {});
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [activeConversation?.id, activeConversation?.counterpartyId]);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setInputText(e.target.value);
+    const now = Date.now();
+    if (activeConversation?.id && now - lastTypingBroadcastRef.current > 2000) {
+      lastTypingBroadcastRef.current = now;
+      api.broadcastTyping(activeConversation.id).catch(() => {});
+    }
+  };
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,7 +175,7 @@ export const Messenger: React.FC<MessengerProps> = ({
         conversationId: activeConversation.id,
         content: text,
       });
-      setMessages((prev) => [...prev, res.message]);
+      setMessages((prev) => [...prev, { ...res.message, status: 'sent' }]);
       fetchConversations();
     } catch (err: any) {
       alert(err.message || 'Failed to send message');
@@ -100,15 +193,33 @@ export const Messenger: React.FC<MessengerProps> = ({
     }
   };
 
+  const handleStartDirectChat = async (participantId: string) => {
+    try {
+      const res = await api.createConversation({
+        type: 'DIRECT',
+        participantId,
+      });
+      setShowNewDirectModal(false);
+      setContactSearch('');
+      await fetchConversations();
+      const match = conversations.find((c) => c.id === res.conversationId);
+      setActiveConversation(match || { id: res.conversationId, counterpartyId: participantId, type: 'DIRECT' });
+    } catch (err: any) {
+      alert(err.message || 'Failed to start direct conversation');
+    }
+  };
+
   const handleCreateGroup = async () => {
-    if (!newGroupTitle.trim()) return;
+    if (!newGroupTitle.trim() || newGroupTitle.trim().length < 2) return;
     try {
       const res = await api.createConversation({
         type: 'GROUP',
         groupTitle: newGroupTitle.trim(),
+        memberIds: selectedGroupMemberIds,
       });
       setShowNewGroupModal(false);
       setNewGroupTitle('');
+      setSelectedGroupMemberIds([]);
       await fetchConversations();
       setActiveConversation({ id: res.conversationId, title: newGroupTitle.trim(), type: 'GROUP' });
     } catch (err: any) {
@@ -116,8 +227,37 @@ export const Messenger: React.FC<MessengerProps> = ({
     }
   };
 
+  const handleLeaveGroup = async () => {
+    if (!activeConversation?.id) return;
+    if (!window.confirm('Are you sure you want to leave this departmental group?')) return;
+    try {
+      await api.leaveConversation(activeConversation.id);
+      setShowGroupInfoModal(false);
+      setActiveConversation(null);
+      await fetchConversations();
+    } catch (err: any) {
+      alert(err.message || 'Failed to leave group');
+    }
+  };
+
+  const toggleGroupMember = (memberId: string) => {
+    setSelectedGroupMemberIds((prev) =>
+      prev.includes(memberId) ? prev.filter((id) => id !== memberId) : [...prev, memberId]
+    );
+  };
+
+  const filteredContacts = contacts.filter((c) => {
+    const q = contactSearch.toLowerCase();
+    return (
+      c.fullName.toLowerCase().includes(q) ||
+      c.pno.includes(q) ||
+      (c.designationName && c.designationName.toLowerCase().includes(q)) ||
+      (c.districtName && c.districtName.toLowerCase().includes(q))
+    );
+  });
+
   return (
-    <div className="max-w-6xl mx-auto px-2 sm:px-4 py-2 sm:py-4 pb-20 md:pb-6 h-[calc(100vh-4rem)]">
+    <div className="max-w-6xl mx-auto px-2 sm:px-4 py-2 sm:py-4 pb-20 md:pb-6 h-[calc(100vh-5rem)]">
       <div className="grid grid-cols-1 md:grid-cols-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-sm h-full">
         {/* Left Pane: Conversation List */}
         <div
@@ -125,7 +265,7 @@ export const Messenger: React.FC<MessengerProps> = ({
             activeConversation ? 'hidden md:flex' : 'flex'
           }`}
         >
-          {/* Header */}
+          {/* Header with New Direct Chat & New Group buttons */}
           <div className="p-3.5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-950/40">
             <div>
               <h2 className="text-sm font-bold text-slate-900 dark:text-white">
@@ -133,19 +273,31 @@ export const Messenger: React.FC<MessengerProps> = ({
               </h2>
               <p className="text-[11px] text-slate-500">Secure TLS & At-Rest Encryption</p>
             </div>
-            <Button
-              variant="teal"
-              size="icon"
-              onClick={() => setShowNewGroupModal(true)}
-              aria-label="Create new group conversation"
-              className="w-9 h-9 min-w-[36px] min-h-[36px] rounded-full p-0"
-              title="New Group"
-            >
-              <Plus className="w-4 h-4" />
-            </Button>
+            <div className="flex items-center gap-1.5">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowNewDirectModal(true)}
+                aria-label={language === 'hi' ? 'नया संदेश प्रारंभ करें' : 'Start new direct chat'}
+                className="w-9 h-9 min-w-[36px] min-h-[36px] rounded-full text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 p-0"
+                title="New Direct Chat"
+              >
+                <MessageSquarePlus className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="teal"
+                size="icon"
+                onClick={() => setShowNewGroupModal(true)}
+                aria-label={language === 'hi' ? 'नया समूह बनाएं' : 'Create new group conversation'}
+                className="w-9 h-9 min-w-[36px] min-h-[36px] rounded-full p-0"
+                title="New Group"
+              >
+                <Users className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
 
-          {/* List */}
+          {/* Conversation List */}
           <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/60">
             {loadingConv ? (
               <div className="flex items-center justify-center h-48">
@@ -158,7 +310,7 @@ export const Messenger: React.FC<MessengerProps> = ({
                   {language === 'hi' ? 'कोई वार्तालाप नहीं' : 'No active conversations'}
                 </p>
                 <p className="text-[11px] text-slate-400 mt-1">
-                  Tap message on any contact in Directory to start a chat.
+                  Tap New Chat above or message any contact in Directory.
                 </p>
               </div>
             ) : (
@@ -215,13 +367,14 @@ export const Messenger: React.FC<MessengerProps> = ({
         >
           {activeConversation ? (
             <>
-              {/* Chat Top Bar */}
+              {/* Chat Top Bar with Accessible Back Button */}
               <div className="p-3 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between">
                 <div className="flex items-center gap-2.5 min-w-0">
                   <button
                     onClick={() => setActiveConversation(null)}
-                    aria-label="Back to conversations list"
-                    className="md:hidden p-1.5 text-slate-500 hover:text-slate-800 dark:hover:text-white rounded-full"
+                    aria-label={language === 'hi' ? 'चैट सूची में वापस' : 'Back to chats'}
+                    title={language === 'hi' ? 'चैट सूची में वापस' : 'Back to chats'}
+                    className="p-1.5 text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                   >
                     <ArrowLeft className="w-5 h-5" />
                   </button>
@@ -229,16 +382,51 @@ export const Messenger: React.FC<MessengerProps> = ({
                     src={activeConversation.displayPhoto}
                     name={activeConversation.displayName || 'Chat'}
                     size="sm"
+                    isOnline={isCounterpartyOnline ?? undefined}
                   />
                   <div className="min-w-0">
                     <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate">
                       {activeConversation.displayName}
                     </h3>
-                    <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
-                      Official Departmental Channel
-                    </p>
+                    <div className="flex items-center gap-1.5">
+                      {activeConversation.type === 'GROUP' ? (
+                        <span className="text-[10px] text-slate-400 font-medium">
+                          Departmental Group
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1 text-[10px] font-medium">
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              isCounterpartyOnline ? 'bg-emerald-500' : 'bg-slate-400'
+                            }`}
+                          />
+                          <span className={isCounterpartyOnline ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}>
+                            {isCounterpartyOnline ? 'Online' : 'Offline'}
+                          </span>
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
+
+                {/* Right Action: Group Info */}
+                {activeConversation.type === 'GROUP' && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => {
+                      api.getConversationMembers(activeConversation.id).then((res) => {
+                        setGroupMembers(res.members || []);
+                        setShowGroupInfoModal(true);
+                      });
+                    }}
+                    aria-label="View group details"
+                    title="Group Details"
+                    className="w-8 h-8 rounded-full text-slate-500 hover:text-slate-800 p-0"
+                  >
+                    <Info className="w-4 h-4" />
+                  </Button>
+                )}
               </div>
 
               {/* Message List */}
@@ -266,12 +454,20 @@ export const Messenger: React.FC<MessengerProps> = ({
                         hour: '2-digit',
                         minute: '2-digit',
                       })}
-                      status="read"
+                      status={m.status || (m.senderId === user?.id ? 'sent' : undefined)}
                       onDeleteForMe={handleDeleteForMe}
                     />
                   ))
                 )}
               </div>
+
+              {/* Typing Banner */}
+              {typingUsers.length > 0 && (
+                <div className="px-4 py-1 text-[11px] text-emerald-600 dark:text-emerald-400 bg-white/70 dark:bg-slate-900/70 italic flex items-center gap-1.5 border-t border-slate-100 dark:border-slate-800">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  {typingUsers.join(', ')} {language === 'hi' ? 'टाइप कर रहे हैं...' : 'is typing...'}
+                </div>
+              )}
 
               {/* Message Input Bar (Supports Hindi text and emojis) */}
               <form
@@ -281,7 +477,7 @@ export const Messenger: React.FC<MessengerProps> = ({
                 <input
                   type="text"
                   value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
+                  onChange={handleInputChange}
                   placeholder={
                     language === 'hi' ? 'संदेश लिखें (हिंदी / English)...' : 'Type a message...'
                   }
@@ -308,46 +504,223 @@ export const Messenger: React.FC<MessengerProps> = ({
                 Select a conversation
               </h3>
               <p className="text-xs text-slate-400 max-w-xs mt-1">
-                Choose a conversation from the left pane or initiate a chat from the directory.
+                Choose a conversation from the left pane or start a new direct or group chat above.
               </p>
             </div>
           )}
         </div>
       </div>
 
+      {/* New Direct Chat Modal */}
+      <Modal
+        isOpen={showNewDirectModal}
+        onClose={() => {
+          setShowNewDirectModal(false);
+          setContactSearch('');
+        }}
+        title="Start New Direct Chat"
+        maxWidth="md"
+      >
+        <div className="space-y-3">
+          <div className="relative">
+            <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+            <input
+              type="text"
+              value={contactSearch}
+              onChange={(e) => setContactSearch(e.target.value)}
+              placeholder="Search by officer name, PNO, rank, or district..."
+              className="w-full pl-9 pr-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#17324F]"
+            />
+          </div>
+
+          <div className="max-h-64 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
+            {filteredContacts.length === 0 ? (
+              <p className="text-xs text-slate-400 text-center py-6">No matching police officers found.</p>
+            ) : (
+              filteredContacts.map((c) => (
+                <div
+                  key={c.id}
+                  onClick={() => handleStartDirectChat(c.id)}
+                  className="flex items-center justify-between p-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/60 rounded-xl cursor-pointer transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <Avatar src={c.photoUrl} name={c.fullName} size="sm" />
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900 dark:text-white">{c.fullName}</h4>
+                      <p className="text-[11px] text-slate-500">
+                        {c.designationName} • {c.districtName} (PNO: {c.pno})
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    aria-label={`Message ${c.fullName}`}
+                    className="text-xs font-semibold text-[#147D84]"
+                  >
+                    Message
+                  </Button>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </Modal>
+
       {/* New Group Modal */}
       <Modal
         isOpen={showNewGroupModal}
-        onClose={() => setShowNewGroupModal(false)}
+        onClose={() => {
+          setShowNewGroupModal(false);
+          setNewGroupTitle('');
+          setSelectedGroupMemberIds([]);
+        }}
         title="Create Departmental Group"
-        maxWidth="sm"
+        maxWidth="md"
         footer={
-          <div className="flex items-center justify-end gap-2 w-full">
+          <div className="flex items-center justify-between w-full">
+            <span className="text-xs font-medium text-slate-500">
+              {selectedGroupMemberIds.length} member(s) selected
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                onClick={() => setShowNewGroupModal(false)}
+                aria-label="Cancel group creation"
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleCreateGroup}
+                disabled={!newGroupTitle.trim() || newGroupTitle.trim().length < 2}
+                aria-label="Confirm create group"
+                className="bg-[#17324F]"
+              >
+                Create Group
+              </Button>
+            </div>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <Input
+            label="Group Subject / Title"
+            value={newGroupTitle}
+            onChange={(e) => setNewGroupTitle(e.target.value)}
+            placeholder="e.g. Crime Branch Sector 4 Taskforce"
+            englishOnlyNotice
+            required
+          />
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              Select Group Members
+            </label>
+            <div className="max-h-56 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl">
+              {contacts.map((c) => {
+                const isSelected = selectedGroupMemberIds.includes(c.id);
+                return (
+                  <div
+                    key={c.id}
+                    onClick={() => toggleGroupMember(c.id)}
+                    className="flex items-center justify-between p-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/60 cursor-pointer transition-colors"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Avatar src={c.photoUrl} name={c.fullName} size="sm" />
+                      <div>
+                        <h5 className="text-xs font-semibold text-slate-900 dark:text-white">{c.fullName}</h5>
+                        <p className="text-[10px] text-slate-400">
+                          {c.designationName} • {c.districtName}
+                        </p>
+                      </div>
+                    </div>
+                    <div
+                      className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${
+                        isSelected
+                          ? 'bg-[#17324F] border-[#17324F] text-white'
+                          : 'border-slate-300 dark:border-slate-600'
+                      }`}
+                    >
+                      {isSelected && <Check className="w-3.5 h-3.5" />}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Group Info Modal */}
+      <Modal
+        isOpen={showGroupInfoModal}
+        onClose={() => setShowGroupInfoModal(false)}
+        title="Departmental Group Details"
+        maxWidth="md"
+        footer={
+          <div className="flex items-center justify-between w-full">
             <Button
-              variant="ghost"
-              onClick={() => setShowNewGroupModal(false)}
-              aria-label="Cancel group creation"
+              variant="danger"
+              size="sm"
+              aria-label="Leave Group"
+              onClick={handleLeaveGroup}
+              icon={<LogOut className="w-3.5 h-3.5" />}
             >
-              Cancel
+              Leave Group
             </Button>
             <Button
-              variant="primary"
-              onClick={handleCreateGroup}
-              disabled={!newGroupTitle.trim()}
-              aria-label="Confirm create group"
+              variant="ghost"
+              aria-label="Close group details"
+              onClick={() => setShowGroupInfoModal(false)}
             >
-              Create Group
+              Close
             </Button>
           </div>
         }
       >
-        <Input
-          label="Group Title / Subject"
-          value={newGroupTitle}
-          onChange={(e) => setNewGroupTitle(e.target.value)}
-          placeholder="e.g. Crime Branch Sector 4"
-          required
-        />
+        <div className="space-y-4">
+          <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl">
+            <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+              {activeConversation?.displayName}
+            </h4>
+            <p className="text-xs text-slate-500">
+              Total Personnel: {groupMembers.length}
+            </p>
+          </div>
+
+          <div>
+            <h5 className="text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
+              Group Members
+            </h5>
+            <div className="max-h-56 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl">
+              {groupMembers.map((m) => (
+                <div key={m.userId} className="flex items-center justify-between p-2.5">
+                  <div className="flex items-center gap-2.5">
+                    <Avatar src={m.photoUrl} name={m.fullName} size="sm" />
+                    <div>
+                      <h6 className="text-xs font-bold text-slate-900 dark:text-white">
+                        {m.fullName} {m.userId === user?.id ? '(You)' : ''}
+                      </h6>
+                      <p className="text-[10px] text-slate-400">
+                        {m.designationName} • {m.districtName}
+                      </p>
+                    </div>
+                  </div>
+                  <span
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      m.memberRole === 'ADMIN'
+                        ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
+                        : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                    }`}
+                  >
+                    {m.memberRole}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </Modal>
     </div>
   );

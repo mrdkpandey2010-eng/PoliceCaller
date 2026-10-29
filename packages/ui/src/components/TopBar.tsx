@@ -1,5 +1,5 @@
 import React from 'react';
-import { Shield, Bell, Moon, Sun, Globe } from 'lucide-react';
+import { Shield, Bell, Moon, Sun, Globe, LogOut } from 'lucide-react';
 import { Button } from './Button';
 
 export interface TopBarProps {
@@ -11,6 +11,7 @@ export interface TopBarProps {
   language?: 'en' | 'hi';
   onToggleLanguage?: () => void;
   userAvatar?: React.ReactNode;
+  onLogout?: () => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -22,6 +23,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   language = 'en',
   onToggleLanguage,
   userAvatar,
+  onLogout,
 }) => {
   return (
     <header className="sticky top-0 z-30 w-full bg-[#17324F] text-white shadow-md border-b border-[#10243B]">
@@ -66,6 +68,19 @@ export const TopBar: React.FC<TopBarProps> = ({
               className="w-9 h-9 min-w-[36px] min-h-[36px] text-white hover:bg-white/10 rounded-full"
             >
               {isDarkMode ? <Sun className="w-4 h-4 text-amber-300" /> : <Moon className="w-4 h-4" />}
+            </Button>
+          )}
+
+          {onLogout && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onLogout}
+              aria-label="Secure Logout"
+              title="Logout"
+              className="w-9 h-9 min-w-[36px] min-h-[36px] text-red-300 hover:text-white hover:bg-red-500/30 rounded-full"
+            >
+              <LogOut className="w-4 h-4" />
             </Button>
           )}
 

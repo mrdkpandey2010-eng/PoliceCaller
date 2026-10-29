@@ -3,6 +3,10 @@ import crypto from 'node:crypto';
 import { D1Database } from '../db/d1-adapter';
 import { AuthenticatedUser } from '../services/auth';
 
+// In-memory ephemeral stores for typing and presence
+const typingStore = new Map<string, { userId: string; userName: string; timestamp: number }>();
+const activePresenceStore = new Map<string, number>();
+
 export function createChatRouter(db: D1Database) {
   const router = new Hono<{
     Variables: {
@@ -243,7 +247,35 @@ export function createChatRouter(db: D1Database) {
         .run();
     }
 
-    return c.json({ success: true, messages: results });
+    // Determine counterparty read/delivery status for outgoing messages
+    const otherMembers = await db
+      .prepare(
+        `SELECT user_id, last_read_message_id 
+         FROM conversation_members 
+         WHERE conversation_id = ? AND user_id != ?`
+      )
+      .bind(convId, user.id)
+      .all<any>();
+
+    const maxReadMsgId = otherMembers.results.reduce(
+      (max: string, m: any) =>
+        m.last_read_message_id && m.last_read_message_id > max ? m.last_read_message_id : max,
+      ''
+    );
+
+    const enrichedMessages = results.map((msg: any) => {
+      let status: 'sent' | 'delivered' | 'read' = 'sent';
+      if (msg.senderId === user.id) {
+        if (maxReadMsgId && msg.id <= maxReadMsgId) {
+          status = 'read';
+        } else if (otherMembers.results.length > 0) {
+          status = 'delivered';
+        }
+      }
+      return { ...msg, status };
+    });
+
+    return c.json({ success: true, messages: enrichedMessages });
   });
 
   // POST /api/chat/messages - Send message
@@ -345,6 +377,127 @@ export function createChatRouter(db: D1Database) {
       .run();
 
     return c.json({ success: true, message: 'Message deleted for you.' });
+  });
+
+  // POST /api/chat/presence/heartbeat - Realtime presence heartbeat
+  router.post('/presence/heartbeat', async (c) => {
+    const user = c.get('user');
+    if (!user) return c.json({ error: 'Unauthorized' }, 401);
+
+    const now = Date.now();
+    activePresenceStore.set(user.id, now);
+
+    await db
+      .prepare(`UPDATE sessions SET last_active_at = ? WHERE user_id = ? AND is_revoked = 0`)
+      .bind(new Date(now).toISOString(), user.id)
+      .run()
+      .catch(() => {});
+
+    return c.json({ success: true, timestamp: now });
+  });
+
+  // GET /api/chat/presence/:userId - Check user's online state
+  router.get('/presence/:userId', async (c) => {
+    const user = c.get('user');
+    if (!user) return c.json({ error: 'Unauthorized' }, 401);
+
+    const targetUserId = c.req.param('userId');
+    const lastActive = activePresenceStore.get(targetUserId);
+    const now = Date.now();
+
+    // Online if active within last 60 seconds
+    const isOnline = lastActive ? now - lastActive < 60000 : false;
+
+    return c.json({
+      success: true,
+      userId: targetUserId,
+      isOnline,
+      lastActiveAt: lastActive ? new Date(lastActive).toISOString() : null,
+    });
+  });
+
+  // POST /api/chat/typing - Broadcast typing state
+  router.post('/typing', async (c) => {
+    const user = c.get('user');
+    if (!user) return c.json({ error: 'Unauthorized' }, 401);
+
+    try {
+      const body = await c.req.json();
+      const { conversationId } = body;
+      if (!conversationId) return c.json({ error: 'conversationId is required' }, 400);
+
+      const key = `${conversationId}:${user.id}`;
+      typingStore.set(key, {
+        userId: user.id,
+        userName: user.fullName,
+        timestamp: Date.now(),
+      });
+
+      return c.json({ success: true });
+    } catch {
+      return c.json({ error: 'Invalid typing payload' }, 400);
+    }
+  });
+
+  // GET /api/chat/typing/:conversationId - Active typers in conversation
+  router.get('/typing/:conversationId', async (c) => {
+    const user = c.get('user');
+    if (!user) return c.json({ error: 'Unauthorized' }, 401);
+
+    const convId = c.req.param('conversationId');
+    const now = Date.now();
+    const activeTypers: string[] = [];
+
+    for (const [key, val] of typingStore.entries()) {
+      if (key.startsWith(`${convId}:`)) {
+        if (now - val.timestamp > 4000) {
+          typingStore.delete(key);
+        } else if (val.userId !== user.id) {
+          activeTypers.push(val.userName);
+        }
+      }
+    }
+
+    return c.json({ success: true, typingUsers: activeTypers });
+  });
+
+  // GET /api/chat/conversations/:conversationId/members - List group members
+  router.get('/conversations/:conversationId/members', async (c) => {
+    const user = c.get('user');
+    if (!user) return c.json({ error: 'Unauthorized' }, 401);
+
+    const convId = c.req.param('conversationId');
+
+    const sql = `
+      SELECT 
+        cm.user_id as userId, cm.role as memberRole, cm.joined_at as joinedAt,
+        u.full_name as fullName, u.pno, u.photo_url as photoUrl,
+        des.name as designationName, d.name as districtName
+      FROM conversation_members cm
+      JOIN users u ON cm.user_id = u.id
+      JOIN designations des ON u.designation_id = des.id
+      JOIN districts d ON u.district_id = d.id
+      WHERE cm.conversation_id = ?
+      ORDER BY cm.role ASC, u.full_name ASC
+    `;
+
+    const { results } = await db.prepare(sql).bind(convId).all();
+    return c.json({ success: true, members: results });
+  });
+
+  // POST /api/chat/conversations/:conversationId/leave - Leave group
+  router.post('/conversations/:conversationId/leave', async (c) => {
+    const user = c.get('user');
+    if (!user) return c.json({ error: 'Unauthorized' }, 401);
+
+    const convId = c.req.param('conversationId');
+
+    await db
+      .prepare('DELETE FROM conversation_members WHERE conversation_id = ? AND user_id = ?')
+      .bind(convId, user.id)
+      .run();
+
+    return c.json({ success: true, message: 'You have left the conversation.' });
   });
 
   return router;

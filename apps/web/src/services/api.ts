@@ -76,6 +76,21 @@ export const api = {
   deleteForMe: (messageId: string) =>
     request(`/chat/messages/${messageId}/delete-for-me`, { method: 'POST' }),
 
+  pingPresence: () => request('/chat/presence/heartbeat', { method: 'POST' }),
+
+  getUserPresence: (userId: string) => request(`/chat/presence/${userId}`),
+
+  broadcastTyping: (conversationId: string) =>
+    request('/chat/typing', { method: 'POST', body: JSON.stringify({ conversationId }) }),
+
+  getTypingUsers: (conversationId: string) => request(`/chat/typing/${conversationId}`),
+
+  getConversationMembers: (conversationId: string) =>
+    request(`/chat/conversations/${conversationId}/members`),
+
+  leaveConversation: (conversationId: string) =>
+    request(`/chat/conversations/${conversationId}/leave`, { method: 'POST' }),
+
   // Notices
   getNotices: () => request('/notices'),
 

@@ -18,6 +18,7 @@ export const AppContent: React.FC = () => {
   const {
     user,
     loading,
+    logout,
     needsTermsAcceptance,
     showNotificationPrompt,
     acceptCurrentTerms,
@@ -70,7 +71,66 @@ export const AppContent: React.FC = () => {
         onToggleTheme={toggleTheme}
         unreadNoticesCount={0}
         onNotificationsClick={() => setActiveTab('notices')}
+        onLogout={logout}
       />
+
+      {/* Desktop Responsive Navigation Bar */}
+      <div className="hidden md:flex items-center justify-center bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 shadow-xs">
+        <div className="flex items-center gap-2 py-2 max-w-7xl mx-auto px-4">
+          <button
+            onClick={() => setActiveTab('directory')}
+            className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              activeTab === 'directory'
+                ? 'bg-[#17324F] text-white shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            {language === 'hi' ? 'निर्देशिका' : 'Directory'}
+          </button>
+          <button
+            onClick={() => setActiveTab('chats')}
+            className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              activeTab === 'chats'
+                ? 'bg-[#17324F] text-white shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            {language === 'hi' ? 'संदेश' : 'Chats'}
+          </button>
+          <button
+            onClick={() => setActiveTab('notices')}
+            className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              activeTab === 'notices'
+                ? 'bg-[#17324F] text-white shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            {language === 'hi' ? 'आदेश व सूचनाएं' : 'Notices & Orders'}
+          </button>
+          {isAdmin && (
+            <button
+              onClick={() => setActiveTab('admin')}
+              className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                activeTab === 'admin'
+                  ? 'bg-[#17324F] text-white shadow-sm'
+                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              {language === 'hi' ? 'प्रशासन' : 'Administration'}
+            </button>
+          )}
+          <button
+            onClick={() => setActiveTab('profile')}
+            className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              activeTab === 'profile'
+                ? 'bg-[#17324F] text-white shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            {language === 'hi' ? 'प्रोफ़ाइल' : 'Profile'}
+          </button>
+        </div>
+      </div>
 
       {/* Main Content Area */}
       <main className="flex-1 w-full">
