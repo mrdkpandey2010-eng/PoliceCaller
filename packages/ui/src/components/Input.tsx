@@ -2,7 +2,7 @@ import React, { useId } from 'react';
 import clsx from 'clsx';
 
 export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
-  label: string;
+  label?: string;
   error?: string | null;
   helperText?: string;
   englishOnlyNotice?: boolean;
@@ -25,19 +25,21 @@ export const Input: React.FC<InputProps> = ({
 
   return (
     <div className="w-full text-left">
-      <div className="flex items-center justify-between mb-1">
-        <label
-          htmlFor={inputId}
-          className="block text-xs font-semibold text-slate-700 dark:text-slate-300"
-        >
-          {label}
-        </label>
-        {englishOnlyNotice && (
-          <span className="text-[10px] font-medium text-[#147D84] bg-teal-50 dark:bg-teal-950/60 dark:text-teal-300 px-1.5 py-0.5 rounded">
-            English Only
-          </span>
-        )}
-      </div>
+      {label && (
+        <div className="flex items-center justify-between mb-1">
+          <label
+            htmlFor={inputId}
+            className="block text-xs font-semibold text-slate-700 dark:text-slate-300"
+          >
+            {label}
+          </label>
+          {englishOnlyNotice && (
+            <span className="text-[10px] font-medium text-[#147D84] bg-teal-50 dark:bg-teal-950/60 dark:text-teal-300 px-1.5 py-0.5 rounded">
+              English Only
+            </span>
+          )}
+        </div>
+      )}
 
       <div className="relative">
         <input
@@ -45,7 +47,7 @@ export const Input: React.FC<InputProps> = ({
           className={clsx(
             'w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border text-sm transition-colors duration-150',
             'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100',
-            'placeholder:text-slate-400 dark:placeholder:text-slate-500',
+            'placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:placeholder-transparent',
             'focus:outline-none focus:ring-2 focus:ring-[#17324F] dark:focus:ring-teal-500',
             error
               ? 'border-red-500 ring-1 ring-red-500 focus:border-red-500 focus:ring-red-500'

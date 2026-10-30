@@ -6,7 +6,7 @@ import { useLanguage } from '../../context/LanguageContext';
 import { api } from '../../services/api';
 
 export interface LoginProps {
-  onNavigateToRegister: (initialIdentifier?: string) => void;
+  onNavigateToRegister?: (initialIdentifier?: string) => void;
 }
 
 export const Login: React.FC<LoginProps> = ({ onNavigateToRegister }) => {
@@ -54,8 +54,11 @@ export const Login: React.FC<LoginProps> = ({ onNavigateToRegister }) => {
         setMatchedUser(res);
         setStage('password');
       } else {
-        // Not registered: navigate directly to English-only registration form
-        onNavigateToRegister(cleanId);
+        setError(
+          language === 'hi'
+            ? 'यह PNO / मोबाइल नंबर पंजीकृत नहीं है। कृपया अपने जिला को-एडमिन से संपर्क करें।'
+            : 'PNO / Mobile number not registered. Please contact your District Co-Admin.'
+        );
       }
     } catch (err: any) {
       setError(err.message || 'Lookup failed. Please verify connection.');
@@ -108,19 +111,8 @@ export const Login: React.FC<LoginProps> = ({ onNavigateToRegister }) => {
 
         <Card className="p-6 sm:p-8 shadow-xl border-slate-200/80 dark:border-slate-800">
           {stage === 'identifier' ? (
-            // Screen 1A: Identifier Input
-            <form onSubmit={handleIdentifierSubmit} className="space-y-5">
-              <div>
-                <h2 className="text-base font-bold text-slate-900 dark:text-white">
-                  {language === 'hi' ? 'सुरक्षित पोर्टल लॉगिन' : 'Portal Authentication'}
-                </h2>
-                <p className="text-xs text-slate-500 mt-1">
-                  {language === 'hi'
-                    ? 'जारी रखने के लिए अपना 8-अंकों का PNO या पंजीकृत मोबाइल नंबर दर्ज करें'
-                    : 'Enter your 8-digit PNO or registered Mobile Number to proceed'}
-                </p>
-              </div>
-
+            // Screen 1A: Minimal Identifier Input
+            <form onSubmit={handleIdentifierSubmit} className="space-y-4">
               {error && (
                 <div className="p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 rounded-xl text-xs text-red-700 dark:text-red-300 flex items-start gap-2">
                   <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -129,17 +121,26 @@ export const Login: React.FC<LoginProps> = ({ onNavigateToRegister }) => {
               )}
 
               <Input
-                label={language === 'hi' ? 'PNO / मोबाइल नंबर' : 'PNO / Mobile Number'}
                 value={identifier}
                 onChange={(e) => {
                   // ASCII digits only
                   const val = e.target.value.replace(/\D/g, '');
                   setIdentifier(val);
                 }}
-                placeholder="e.g. 00000001 or 9876543210"
+                placeholder={
+                  language === 'hi'
+                    ? '9-अंकों का PNO या पंजीकृत मोबाइल नंबर दर्ज करें'
+                    : 'Enter your 9-digit PNO or registered Mobile Number to proceed'
+                }
+                aria-label={
+                  language === 'hi'
+                    ? '9-अंकों का PNO या पंजीकृत मोबाइल नंबर दर्ज करें'
+                    : 'Enter your 9-digit PNO or registered Mobile Number to proceed'
+                }
                 maxLength={10}
                 required
                 autoFocus
+                className="text-xs sm:text-sm placeholder:text-xs sm:placeholder:text-sm py-3"
               />
 
               <Button
@@ -152,18 +153,6 @@ export const Login: React.FC<LoginProps> = ({ onNavigateToRegister }) => {
                 <span>{language === 'hi' ? 'आगे बढ़ें' : 'Continue'}</span>
                 <ArrowRight className="w-4 h-4 ml-1 inline" />
               </Button>
-
-              <div className="text-center pt-2">
-                <button
-                  type="button"
-                  onClick={() => onNavigateToRegister()}
-                  className="text-xs font-semibold text-[#147D84] hover:underline"
-                >
-                  {language === 'hi'
-                    ? 'नया पुलिस कर्मी? नया पंजीकरण करें'
-                    : 'New Police Personnel? Register here'}
-                </button>
-              </div>
             </form>
           ) : (
             // Screen 1B: Password Verification
