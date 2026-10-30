@@ -1,28 +1,3 @@
--- Seed Police Stations, Offices and Initial Versioned Policy
-
--- Stations & Offices
-INSERT OR IGNORE INTO stations_offices (id, district_id, name, type, address, phone, is_active) VALUES
--- Lucknow
-('stn_lko_hazratganj', 'dist_lucknow', 'PS Hazratganj', 'POLICE_STATION', 'Hazratganj, Lucknow', '05222238491', 1),
-('stn_lko_gomtinagar', 'dist_lucknow', 'PS Gomti Nagar', 'POLICE_STATION', 'Gomti Nagar, Lucknow', '05222728192', 1),
-('stn_lko_sp_office', 'dist_lucknow', 'SP City Office Lucknow', 'SP_OFFICE', 'Police Line, Lucknow', '05222200100', 1),
-('stn_lko_line', 'dist_lucknow', 'Reserve Police Line Lucknow', 'LINE', 'Mahanagar, Lucknow', '05222200101', 1),
--- Varanasi
-('stn_vns_cantt', 'dist_varanasi', 'PS Cantt Varanasi', 'POLICE_STATION', 'Cantonment, Varanasi', '05422501234', 1),
-('stn_vns_dashashwamedh', 'dist_varanasi', 'PS Dashashwamedh', 'POLICE_STATION', 'Dashashwamedh Ghat, Varanasi', '05422505678', 1),
-('stn_vns_sp_office', 'dist_varanasi', 'SSP Office Varanasi', 'SP_OFFICE', 'Kachehari, Varanasi', '05422509999', 1),
--- Prayagraj
-('stn_pry_civil_lines', 'dist_prayagraj', 'PS Civil Lines', 'POLICE_STATION', 'Civil Lines, Prayagraj', '05322401122', 1),
-('stn_pry_sp_office', 'dist_prayagraj', 'SSP Office Prayagraj', 'SP_OFFICE', 'Collectorate, Prayagraj', '05322403344', 1),
--- Kanpur Nagar
-('stn_kpn_kotwali', 'dist_kanpur_nagar', 'PS Kotwali', 'POLICE_STATION', 'Kotwali, Kanpur Nagar', '05122301122', 1),
--- Gorakhpur
-('stn_gkp_cantt', 'dist_gorakhpur', 'PS Cantt Gorakhpur', 'POLICE_STATION', 'Cantt, Gorakhpur', '05512334455', 1),
--- Agra
-('stn_agr_tajganj', 'dist_agra', 'PS Tajganj', 'POLICE_STATION', 'Tajganj, Agra', '05622233445', 1),
--- Meerut
-('stn_mrt_civil_lines', 'dist_meerut', 'PS Civil Lines Meerut', 'POLICE_STATION', 'Civil Lines, Meerut', '01212601122', 1);
-
 -- Version 1.0 Departmental Terms & Conditions Policy
 INSERT OR IGNORE INTO policies (id, version, title_en, title_hi, content_en, content_hi, type, is_active, published_at) VALUES
 ('pol_terms_v1', '1.0', 

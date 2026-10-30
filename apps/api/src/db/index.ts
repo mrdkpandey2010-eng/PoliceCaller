@@ -44,6 +44,12 @@ export async function applyMigrations(db: D1Database, migrationsDir?: string, se
     await db.exec(sql);
   }
 
+  const stationsSeed = path.join(baseSeedsDir, 'police_stations_1878.sql');
+  if (fs.existsSync(stationsSeed)) {
+    const sql = fs.readFileSync(stationsSeed, 'utf-8');
+    await db.exec(sql);
+  }
+
   const initialDataSeed = path.join(baseSeedsDir, 'initial_data.sql');
   if (fs.existsSync(initialDataSeed)) {
     const sql = fs.readFileSync(initialDataSeed, 'utf-8');
