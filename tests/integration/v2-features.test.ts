@@ -163,6 +163,65 @@ describe('V2 Master Specification Features Test Suite', () => {
       const data = await res.json();
       expect(data.error).toMatch(/English letters/i);
     });
+
+    it('allows Super Admin to appoint a user as District Co-Admin and then revoke their role', async () => {
+      // 1. Appoint usr_test_1 as District Co-Admin
+      const assignRes = await app.request('/api/admin/coadmins/usr_test_1/assign', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${superAdminToken}` },
+      });
+
+      expect(assignRes.status).toBe(200);
+      const assignData = await assignRes.json();
+      expect(assignData.success).toBe(true);
+
+      // Verify role in database
+      const userInDb = await db.prepare('SELECT role FROM users WHERE id = ?').bind('usr_test_1').first<any>();
+      expect(userInDb.role).toBe('DISTRICT_CO_ADMIN');
+
+      // Verify appears in Co-Admins list
+      const listRes = await app.request('/api/admin/coadmins', {
+        headers: { Authorization: `Bearer ${superAdminToken}` },
+      });
+      const listData = await listRes.json();
+      expect(listData.coAdmins.some((ca: any) => ca.id === 'usr_test_1')).toBe(true);
+
+      // 2. Revoke District Co-Admin role
+      const revokeRes = await app.request('/api/admin/coadmins/usr_test_1/revoke', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${superAdminToken}` },
+      });
+
+      expect(revokeRes.status).toBe(200);
+      const revokeData = await revokeRes.json();
+      expect(revokeData.success).toBe(true);
+
+      // Verify role reverted to USER
+      const revertedUser = await db.prepare('SELECT role FROM users WHERE id = ?').bind('usr_test_1').first<any>();
+      expect(revertedUser.role).toBe('USER');
+    });
+
+    it('forbids regular users from appointing or revoking Co-Admins', async () => {
+      // Login as regular user
+      const userLoginRes = await app.request('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pno: '00123456', password: 'TestPass@2026' }),
+      });
+      const regularToken = (await userLoginRes.json()).token;
+
+      const forbiddenAssign = await app.request('/api/admin/coadmins/usr_test_pending/assign', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${regularToken}` },
+      });
+      expect(forbiddenAssign.status).toBe(403);
+
+      const forbiddenRevoke = await app.request('/api/admin/coadmins/usr_test_1/revoke', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${regularToken}` },
+      });
+      expect(forbiddenRevoke.status).toBe(403);
+    });
   });
 
   describe('Messenger: Delete for Me Functionality', () => {

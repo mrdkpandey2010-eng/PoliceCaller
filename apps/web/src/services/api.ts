@@ -146,6 +146,9 @@ export const api = {
   assignCoAdmin: (userId: string) =>
     request(`/admin/coadmins/${userId}/assign`, { method: 'POST' }),
 
+  revokeCoAdmin: (userId: string) =>
+    request(`/admin/coadmins/${userId}/revoke`, { method: 'POST' }),
+
   getDevices: () => request('/admin/devices'),
 
   revokeDevice: (deviceId: string) =>

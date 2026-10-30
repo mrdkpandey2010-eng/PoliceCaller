@@ -405,11 +405,15 @@ export function createAdminRouter(db: D1Database) {
 
     const { results } = await db
       .prepare(
-        `SELECT u.id, u.pno, u.full_name as fullName, u.mobile, u.email, u.district_id as districtId, d.name as districtName, u.status
+        `SELECT u.id, u.pno, u.full_name as fullName, u.mobile, u.email, 
+                u.district_id as districtId, d.name as districtName, u.status,
+                des.name as designationName, s.name as stationName
          FROM users u
-         JOIN districts d ON u.district_id = d.id
+         LEFT JOIN districts d ON u.district_id = d.id
+         LEFT JOIN designations des ON u.designation_id = des.id
+         LEFT JOIN stations_offices s ON u.station_office_id = s.id
          WHERE u.role = 'DISTRICT_CO_ADMIN'
-         ORDER BY d.name ASC`
+         ORDER BY d.name ASC, u.full_name ASC`
       )
       .all();
 
@@ -424,8 +428,20 @@ export function createAdminRouter(db: D1Database) {
     }
 
     const targetUserId = c.req.param('userId');
-    const now = new Date().toISOString();
+    const target = await db
+      .prepare('SELECT id, pno, full_name, role, district_id FROM users WHERE id = ?')
+      .bind(targetUserId)
+      .first<any>();
 
+    if (!target) {
+      return c.json({ error: 'User not found.' }, 404);
+    }
+
+    if (target.role === ROLES.SUPER_ADMIN) {
+      return c.json({ error: 'Cannot modify Super Admin role.' }, 400);
+    }
+
+    const now = new Date().toISOString();
     await db
       .prepare(`UPDATE users SET role = 'DISTRICT_CO_ADMIN', updated_at = ? WHERE id = ?`)
       .bind(now, targetUserId)
@@ -436,10 +452,52 @@ export function createAdminRouter(db: D1Database) {
       action: 'ASSIGN_COADMIN_ROLE',
       entityType: 'USER',
       entityId: targetUserId,
-      districtScope: 'STATEWIDE',
+      districtScope: target.district_id || 'STATEWIDE',
+      beforeState: { role: target.role },
+      afterState: { role: 'DISTRICT_CO_ADMIN' },
     });
 
-    return c.json({ success: true, message: 'User assigned as District Co-Admin.' });
+    return c.json({ success: true, message: `${target.full_name} (${target.pno}) has been appointed as District Co-Admin.` });
+  });
+
+  // POST /api/admin/coadmins/:userId/revoke - Remove user from District Co-Admin (revert to USER)
+  router.post('/coadmins/:userId/revoke', async (c) => {
+    const user = c.get('user')!;
+    if (user.role !== ROLES.SUPER_ADMIN) {
+      return c.json({ error: 'Forbidden: Super Admin only.' }, 403);
+    }
+
+    const targetUserId = c.req.param('userId');
+    const target = await db
+      .prepare('SELECT id, pno, full_name, role, district_id FROM users WHERE id = ?')
+      .bind(targetUserId)
+      .first<any>();
+
+    if (!target) {
+      return c.json({ error: 'User not found.' }, 404);
+    }
+
+    if (target.role !== ROLES.DISTRICT_CO_ADMIN) {
+      return c.json({ error: 'User is not currently a District Co-Admin.' }, 400);
+    }
+
+    const now = new Date().toISOString();
+    await db
+      .prepare(`UPDATE users SET role = 'USER', updated_at = ? WHERE id = ?`)
+      .bind(now, targetUserId)
+      .run();
+
+    await logAuditEvent(db, {
+      actor: user,
+      action: 'REVOKE_COADMIN_ROLE',
+      entityType: 'USER',
+      entityId: targetUserId,
+      districtScope: target.district_id || 'STATEWIDE',
+      beforeState: { role: target.role },
+      afterState: { role: 'USER' },
+    });
+
+    return c.json({ success: true, message: `District Co-Admin privileges revoked for ${target.full_name} (${target.pno}). Reverted to standard User.` });
   });
 
   // GET /api/admin/devices - Device Management Logs (Super Admin only)

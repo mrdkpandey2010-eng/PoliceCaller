@@ -16,6 +16,9 @@ import {
   RotateCcw,
   Search,
   Edit2,
+  UserPlus,
+  UserX,
+  ShieldCheck,
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -51,6 +54,17 @@ export const AdminDashboard: React.FC = () => {
   const [designations, setDesignations] = useState<any[]>([]);
   const [editSaving, setEditSaving] = useState(false);
   const [userSearchQuery, setUserSearchQuery] = useState('');
+
+  // Co-Admins management state
+  const [coAdminsSearch, setCoAdminsSearch] = useState('');
+  const [appointModalOpen, setAppointModalOpen] = useState(false);
+  const [appointSearchQuery, setAppointSearchQuery] = useState('');
+  const [appointCandidates, setAppointCandidates] = useState<any[]>([]);
+  const [appointSearching, setAppointSearching] = useState(false);
+  const [selectedCandidate, setSelectedCandidate] = useState<any | null>(null);
+  const [appointSubmitting, setAppointSubmitting] = useState(false);
+  const [revokeConfirmUser, setRevokeConfirmUser] = useState<any | null>(null);
+  const [revokeSubmitting, setRevokeSubmitting] = useState(false);
 
   const fetchOverview = async () => {
     setLoading(true);
@@ -176,6 +190,67 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
+  const handleSearchAppointCandidates = async (query: string) => {
+    setAppointSearchQuery(query);
+    if (!query.trim()) {
+      setAppointCandidates([]);
+      return;
+    }
+    setAppointSearching(true);
+    try {
+      const res = await api.getUsers({ search: query.trim() });
+      const eligible = (res.users || []).filter(
+        (u: any) => u.role !== ROLES.SUPER_ADMIN && u.role !== ROLES.DISTRICT_CO_ADMIN && u.status === 'ACTIVE'
+      );
+      setAppointCandidates(eligible);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setAppointSearching(false);
+    }
+  };
+
+  const handleAppointCoAdmin = async () => {
+    if (!selectedCandidate) return;
+    setAppointSubmitting(true);
+    try {
+      const res = await api.assignCoAdmin(selectedCandidate.id);
+      alert(res.message || `${selectedCandidate.fullName} appointed as District Co-Admin.`);
+      setAppointModalOpen(false);
+      setSelectedCandidate(null);
+      setAppointSearchQuery('');
+      setAppointCandidates([]);
+      loadTabContent('coadmins');
+      if (activeTab === 'users') {
+        loadTabContent('users');
+      }
+      fetchOverview();
+    } catch (err: any) {
+      alert(err.message || 'Failed to appoint District Co-Admin.');
+    } finally {
+      setAppointSubmitting(false);
+    }
+  };
+
+  const handleRevokeCoAdmin = async () => {
+    if (!revokeConfirmUser) return;
+    setRevokeSubmitting(true);
+    try {
+      const res = await api.revokeCoAdmin(revokeConfirmUser.id);
+      alert(res.message || 'District Co-Admin privileges revoked.');
+      setRevokeConfirmUser(null);
+      loadTabContent('coadmins');
+      if (activeTab === 'users') {
+        loadTabContent('users');
+      }
+      fetchOverview();
+    } catch (err: any) {
+      alert(err.message || 'Failed to revoke District Co-Admin privileges.');
+    } finally {
+      setRevokeSubmitting(false);
+    }
+  };
+
   const handleReviewTransfer = async (transferId: string, action: 'APPROVE' | 'REJECT') => {
     try {
       await api.reviewTransfer({ transferId, action });
@@ -218,6 +293,18 @@ export const AdminDashboard: React.FC = () => {
       u.mobile?.toLowerCase().includes(q) ||
       u.designationName?.toLowerCase().includes(q) ||
       u.stationOfficeName?.toLowerCase().includes(q)
+    );
+  });
+
+  const filteredCoAdmins = coAdmins.filter((ca) => {
+    if (!coAdminsSearch.trim()) return true;
+    const q = coAdminsSearch.toLowerCase();
+    return (
+      ca.fullName?.toLowerCase().includes(q) ||
+      ca.pno?.toLowerCase().includes(q) ||
+      ca.districtName?.toLowerCase().includes(q) ||
+      ca.mobile?.toLowerCase().includes(q) ||
+      ca.designationName?.toLowerCase().includes(q)
     );
   });
 
@@ -469,6 +556,7 @@ export const AdminDashboard: React.FC = () => {
                   <th className="p-3">Designation</th>
                   <th className="p-3">District & Station</th>
                   <th className="p-3">Phone</th>
+                  <th className="p-3">Role</th>
                   <th className="p-3">Status</th>
                   <th className="p-3 text-right">Actions</th>
                 </tr>
@@ -492,11 +580,44 @@ export const AdminDashboard: React.FC = () => {
                       {u.mobile}
                     </td>
                     <td className="p-3">
+                      <Badge
+                        variant={u.role === ROLES.SUPER_ADMIN ? 'khaki' : u.role === ROLES.DISTRICT_CO_ADMIN ? 'teal' : 'neutral'}
+                        size="sm"
+                      >
+                        {u.role === ROLES.SUPER_ADMIN ? 'Super Admin' : u.role === ROLES.DISTRICT_CO_ADMIN ? 'Co-Admin' : 'Officer'}
+                      </Badge>
+                    </td>
+                    <td className="p-3">
                       <Badge variant={u.status === 'ACTIVE' ? 'success' : 'neutral'} size="sm">
                         {u.status}
                       </Badge>
                     </td>
-                    <td className="p-3 text-right space-x-1">
+                    <td className="p-3 text-right space-x-1 whitespace-nowrap">
+                      {isSuperAdmin && u.role === ROLES.USER && u.status === 'ACTIVE' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedCandidate(u);
+                            setAppointModalOpen(true);
+                          }}
+                          aria-label={`Appoint ${u.fullName} as District Co-Admin`}
+                          className="text-[11px] px-2 py-1 text-teal-700 dark:text-teal-300 border-teal-300 dark:border-teal-700 hover:bg-teal-50 dark:hover:bg-teal-950/40 font-medium"
+                        >
+                          Make Co-Admin
+                        </Button>
+                      )}
+                      {isSuperAdmin && u.role === ROLES.DISTRICT_CO_ADMIN && (
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          onClick={() => setRevokeConfirmUser(u)}
+                          aria-label={`Revoke Co-Admin role from ${u.fullName}`}
+                          className="text-[11px] px-2 py-1 font-medium"
+                        >
+                          Revoke Co-Admin
+                        </Button>
+                      )}
                       <Button
                         variant="outline"
                         size="sm"
@@ -600,6 +721,125 @@ export const AdminDashboard: React.FC = () => {
 
       {/* Tab: Excel Bulk Import */}
       {activeTab === 'excel' && <ExcelImport />}
+
+      {/* Privileged Tab: District Co-Admins Management (Super Admin Exclusive Tool) */}
+      {activeTab === 'coadmins' && isSuperAdmin && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-[#147D84]" />
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                  District Co-Admin Command Oversight (जिला को-एडमिन प्रबंधन)
+                </h3>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Super Admin Authority: Appoint, monitor, and revoke District Co-Admin administrative authority across all 75 Uttar Pradesh districts.
+              </p>
+            </div>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => {
+                setSelectedCandidate(null);
+                setAppointSearchQuery('');
+                setAppointCandidates([]);
+                setAppointModalOpen(true);
+              }}
+              aria-label="Appoint new district co-admin"
+              className="bg-[#17324F] text-xs font-bold shadow-sm flex items-center gap-1.5"
+            >
+              <UserPlus className="w-4 h-4" />
+              Appoint New Co-Admin
+            </Button>
+          </div>
+
+          {/* Search Bar & Summary */}
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="text-xs text-slate-600 dark:text-slate-400 font-medium">
+              Currently appointed: <strong className="text-slate-900 dark:text-white font-mono">{filteredCoAdmins.length}</strong> Co-Admin(s)
+            </div>
+            <div className="relative w-full sm:w-72">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Search Co-Admins by Name, PNO, District..."
+                value={coAdminsSearch}
+                onChange={(e) => setCoAdminsSearch(e.target.value)}
+                className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#147D84]"
+              />
+            </div>
+          </div>
+
+          {/* Co-Admins Table */}
+          {filteredCoAdmins.length === 0 ? (
+            <Card className="p-8 text-center text-slate-400 text-xs space-y-2">
+              <p className="font-semibold text-slate-600 dark:text-slate-300">
+                {coAdminsSearch.trim() ? 'No Co-Admins match your search criteria.' : 'No District Co-Admins currently appointed.'}
+              </p>
+              <p className="text-[11px] text-slate-400">
+                Click <strong>"Appoint New Co-Admin"</strong> above to appoint an officer to manage district approvals and rosters.
+              </p>
+            </Card>
+          ) : (
+            <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-2xl bg-white dark:bg-slate-900">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 dark:bg-slate-800/80 text-[11px] font-bold text-slate-500 uppercase">
+                  <tr>
+                    <th className="p-3">Assigned District</th>
+                    <th className="p-3">PNO</th>
+                    <th className="p-3">Officer Name</th>
+                    <th className="p-3">Designation</th>
+                    <th className="p-3">Contact</th>
+                    <th className="p-3">Status</th>
+                    <th className="p-3 text-right">Administrative Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {filteredCoAdmins.map((ca) => (
+                    <tr key={ca.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                      <td className="p-3">
+                        <Badge variant="teal" size="sm" className="font-bold">
+                          {ca.districtName || 'Unassigned'}
+                        </Badge>
+                      </td>
+                      <td className="p-3 font-mono font-bold text-slate-800 dark:text-slate-200">
+                        {ca.pno}
+                      </td>
+                      <td className="p-3 font-medium text-slate-900 dark:text-white">
+                        {ca.fullName}
+                      </td>
+                      <td className="p-3 text-[#147D84] font-medium">
+                        {ca.designationName || 'Officer'}
+                      </td>
+                      <td className="p-3 font-mono text-slate-600 dark:text-slate-300">
+                        {ca.mobile}
+                      </td>
+                      <td className="p-3">
+                        <Badge variant={ca.status === 'ACTIVE' ? 'success' : 'neutral'} size="sm">
+                          {ca.status}
+                        </Badge>
+                      </td>
+                      <td className="p-3 text-right">
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          onClick={() => setRevokeConfirmUser(ca)}
+                          aria-label={`Revoke Co-Admin role from ${ca.fullName}`}
+                          className="text-[11px] px-3 py-1 font-bold inline-flex items-center gap-1 ml-auto"
+                        >
+                          <UserX className="w-3.5 h-3.5" />
+                          Revoke Co-Admin
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Privileged Tab: 6-Hour Automated Backups */}
       {activeTab === 'backup' && isSuperAdmin && (
@@ -787,6 +1027,177 @@ export const AdminDashboard: React.FC = () => {
               placeholder="officer@uppolice.gov.in"
             />
           </div>
+        </div>
+      </Modal>
+
+      {/* Appoint District Co-Admin Modal */}
+      <Modal
+        isOpen={appointModalOpen}
+        onClose={() => {
+          if (!appointSubmitting) {
+            setAppointModalOpen(false);
+            setSelectedCandidate(null);
+          }
+        }}
+        title="Appoint District Co-Admin (को-एडमिन नियुक्ति)"
+        maxWidth="md"
+        footer={
+          <div className="flex items-center justify-end gap-2 w-full">
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setAppointModalOpen(false);
+                setSelectedCandidate(null);
+              }}
+              disabled={appointSubmitting}
+              aria-label="Cancel appointment"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleAppointCoAdmin}
+              disabled={!selectedCandidate || appointSubmitting}
+              aria-label="Confirm appointment"
+              className="bg-[#17324F] font-bold"
+            >
+              {appointSubmitting ? 'Appointing...' : 'Confirm Appointment'}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <div className="p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-xl text-xs text-blue-900 dark:text-blue-200">
+            <strong>Super Admin Authority:</strong> Appoint any active, verified police personnel as District Co-Admin. They will receive administrative authority over their assigned district.
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              Search Personnel (by PNO or Name)
+            </label>
+            <div className="relative">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Type PNO or English Name to search..."
+                value={appointSearchQuery}
+                onChange={(e) => handleSearchAppointCandidates(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#147D84]"
+              />
+            </div>
+          </div>
+
+          {appointSearching && (
+            <p className="text-xs text-slate-400 text-center py-2">Searching eligible personnel...</p>
+          )}
+
+          {appointCandidates.length > 0 && !selectedCandidate && (
+            <div className="max-h-48 overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-xl divide-y divide-slate-100 dark:divide-slate-800">
+              {appointCandidates.map((cand) => (
+                <div
+                  key={cand.id}
+                  className="p-3 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/60 cursor-pointer transition-colors"
+                  onClick={() => setSelectedCandidate(cand)}
+                >
+                  <div>
+                    <h5 className="text-xs font-bold text-slate-900 dark:text-white">
+                      {cand.fullName}
+                    </h5>
+                    <p className="text-[11px] text-slate-500 font-mono">
+                      PNO: {cand.pno} • {cand.designationName || 'Officer'} • District: {cand.districtName}
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-[11px] px-2 py-1 text-teal-700 dark:text-teal-300"
+                    aria-label={`Select ${cand.fullName}`}
+                  >
+                    Select
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {selectedCandidate && (
+            <div className="p-4 bg-teal-50/60 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800 rounded-2xl space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-teal-900 dark:text-teal-200 text-sm">
+                  Selected Candidate
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedCandidate(null)}
+                  className="text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 underline font-semibold"
+                >
+                  Change Selection
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-2 pt-1 text-slate-700 dark:text-slate-300">
+                <p>Officer Name: <strong>{selectedCandidate.fullName}</strong></p>
+                <p>PNO: <strong className="font-mono">{selectedCandidate.pno}</strong></p>
+                <p>Designation: <strong>{selectedCandidate.designationName || 'Officer'}</strong></p>
+                <p>Command District: <strong className="text-[#147D84]">{selectedCandidate.districtName}</strong></p>
+              </div>
+              <p className="text-[11px] text-teal-800 dark:text-teal-300 mt-2 font-medium">
+                Upon confirmation, this officer will be granted District Co-Admin authority over <strong>{selectedCandidate.districtName}</strong>.
+              </p>
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      {/* Revoke Co-Admin Confirmation Modal */}
+      <Modal
+        isOpen={Boolean(revokeConfirmUser)}
+        onClose={() => {
+          if (!revokeSubmitting) {
+            setRevokeConfirmUser(null);
+          }
+        }}
+        title="Revoke District Co-Admin Role (को-एडमिन पद से हटाएं)"
+        maxWidth="sm"
+        footer={
+          <div className="flex items-center justify-end gap-2 w-full">
+            <Button
+              variant="ghost"
+              onClick={() => setRevokeConfirmUser(null)}
+              disabled={revokeSubmitting}
+              aria-label="Cancel revocation"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={handleRevokeCoAdmin}
+              disabled={revokeSubmitting}
+              aria-label="Confirm revoke role"
+              className="font-bold"
+            >
+              {revokeSubmitting ? 'Revoking...' : 'Confirm Revocation'}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <div className="p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-xl text-xs text-red-900 dark:text-red-200">
+            <strong>Revocation Notice:</strong> You are about to revoke District Co-Admin privileges for:
+            <div className="mt-2 font-semibold">
+              {revokeConfirmUser?.fullName} (PNO: <code>{revokeConfirmUser?.pno}</code>)
+            </div>
+            <div className="text-[11px] text-red-700 dark:text-red-300 mt-1">
+              District: <strong>{revokeConfirmUser?.districtName}</strong>
+            </div>
+          </div>
+          <p className="text-xs text-slate-600 dark:text-slate-400">
+            This officer will immediately revert to a standard <strong>USER</strong> role and lose all access to:
+          </p>
+          <ul className="text-xs text-slate-500 list-disc list-inside space-y-1">
+            <li>Reviewing and approving district registration requests</li>
+            <li>Approving destination district transfers</li>
+            <li>Managing district personnel directory rosters</li>
+          </ul>
         </div>
       </Modal>
     </div>
