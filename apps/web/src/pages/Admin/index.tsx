@@ -19,11 +19,13 @@ import {
   UserPlus,
   UserX,
   ShieldCheck,
+  Building2,
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { ROLES } from '@police-directory/shared';
 import { ExcelImport } from './ExcelImport';
+import { MasterDataManagement } from './MasterData/MasterDataManagement';
 
 export const AdminDashboard: React.FC = () => {
   const { user } = useAuth();
@@ -389,6 +391,17 @@ export const AdminDashboard: React.FC = () => {
         {/* Super Admin Privileged Tabs */}
         {isSuperAdmin && (
           <>
+            <button
+              onClick={() => setActiveTab('masters')}
+              className={`px-3 py-2 rounded-xl font-bold transition-colors shrink-0 flex items-center gap-1.5 ${
+                activeTab === 'masters'
+                  ? 'bg-[#17324F] text-white'
+                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              <Building2 className="w-3.5 h-3.5 text-[#147D84]" />
+              Master Data
+            </button>
             <button
               onClick={() => loadTabContent('coadmins')}
               className={`px-3 py-2 rounded-xl font-bold transition-colors shrink-0 ${
@@ -840,6 +853,9 @@ export const AdminDashboard: React.FC = () => {
           )}
         </div>
       )}
+
+      {/* Super Admin Privileged Tab: Master Data Management */}
+      {activeTab === 'masters' && isSuperAdmin && <MasterDataManagement />}
 
       {/* Privileged Tab: 6-Hour Automated Backups */}
       {activeTab === 'backup' && isSuperAdmin && (

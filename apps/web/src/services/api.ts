@@ -174,12 +174,81 @@ export const api = {
     request('/admin/excel/rollback', { method: 'POST', body: JSON.stringify({ jobId }) }),
 
   // Masters
-  getDistricts: () => request('/masters/districts'),
+  getDistricts: (params?: { all?: boolean; search?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.all) qs.append('all', 'true');
+    if (params?.search) qs.append('search', params.search);
+    const qStr = qs.toString();
+    return request(`/masters/districts${qStr ? `?${qStr}` : ''}`);
+  },
 
-  getStations: (districtId?: string) =>
-    request(`/masters/stations${districtId ? `?districtId=${districtId}` : ''}`),
+  createDistrict: (data: { code: string; name: string; zone?: string; range?: string }) =>
+    request('/masters/districts', { method: 'POST', body: JSON.stringify(data) }),
 
-  getDesignations: () => request('/masters/designations'),
+  updateDistrict: (id: string, data: { code?: string; name?: string; zone?: string; range?: string }) =>
+    request(`/masters/districts/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  toggleDistrictActive: (id: string) =>
+    request(`/masters/districts/${id}/toggle-active`, { method: 'POST' }),
+
+  deleteDistrict: (id: string) =>
+    request(`/masters/districts/${id}`, { method: 'DELETE' }),
+
+  getStations: (params?: { districtId?: string; type?: string; all?: boolean; search?: string } | string) => {
+    if (typeof params === 'string') {
+      return request(`/masters/stations?districtId=${params}`);
+    }
+    const qs = new URLSearchParams();
+    if (params?.districtId) qs.append('districtId', params.districtId);
+    if (params?.type) qs.append('type', params.type);
+    if (params?.all) qs.append('all', 'true');
+    if (params?.search) qs.append('search', params.search);
+    const qStr = qs.toString();
+    return request(`/masters/stations${qStr ? `?${qStr}` : ''}`);
+  },
+
+  createStation: (data: { districtId: string; name: string; type: string; address?: string; phone?: string }) =>
+    request('/masters/stations', { method: 'POST', body: JSON.stringify(data) }),
+
+  updateStation: (id: string, data: { name?: string; type?: string; address?: string; phone?: string }) =>
+    request(`/masters/stations/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  toggleStationActive: (id: string) =>
+    request(`/masters/stations/${id}/toggle-active`, { method: 'POST' }),
+
+  deleteStation: (id: string) =>
+    request(`/masters/stations/${id}`, { method: 'DELETE' }),
+
+  getDesignations: (params?: { all?: boolean; search?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.all) qs.append('all', 'true');
+    if (params?.search) qs.append('search', params.search);
+    const qStr = qs.toString();
+    return request(`/masters/designations${qStr ? `?${qStr}` : ''}`);
+  },
+
+  createDesignation: (data: { code: string; name: string; shortName: string; rankOrder: number }) =>
+    request('/masters/designations', { method: 'POST', body: JSON.stringify(data) }),
+
+  updateDesignation: (id: string, data: { code?: string; name?: string; shortName?: string; rankOrder?: number }) =>
+    request(`/masters/designations/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  toggleDesignationActive: (id: string) =>
+    request(`/masters/designations/${id}/toggle-active`, { method: 'POST' }),
+
+  deleteDesignation: (id: string) =>
+    request(`/masters/designations/${id}`, { method: 'DELETE' }),
+
+  masterBulkDryRun: (payload: { entityType: string; districtId?: string; rawLines?: string; rows?: any[]; skipExisting?: boolean }) =>
+    request('/masters/bulk/dry-run', { method: 'POST', body: JSON.stringify(payload) }),
+
+  masterBulkCommit: (payload: { entityType: string; districtId?: string; rows: any[]; fileName?: string; skipExisting?: boolean }) =>
+    request('/masters/bulk/commit', { method: 'POST', body: JSON.stringify(payload) }),
+
+  masterBulkRollback: (jobId: string) =>
+    request('/masters/bulk/rollback', { method: 'POST', body: JSON.stringify({ jobId }) }),
+
+  getMasterImportHistory: () => request('/masters/bulk/history'),
 
   getPolicies: (type: string = 'TERMS') => request(`/masters/policies?type=${type}`),
 };
