@@ -225,12 +225,27 @@ export function createAuthRouter(db: D1Database) {
         );
       }
 
-      const clientIp = c.req.header('x-forwarded-for') || '127.0.0.1';
+      const clientIp = c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || '127.0.0.1';
       const userAgent = c.req.header('user-agent') || 'Browser';
-      const platform = body.platform === 'ANDROID' ? 'ANDROID' : 'WEB';
-      const deviceName = body.deviceName || 'Standard Client';
+      const platform = String(body.platform || '').toUpperCase() === 'ANDROID' ? 'ANDROID' : 'WEB';
+      const deviceName = body.deviceName || (platform === 'ANDROID' ? 'Android Device' : 'Web Browser');
 
-      const session = await createSession(db, user.id, clientIp, userAgent, platform, deviceName);
+      const session = await createSession(
+        db,
+        user.id,
+        clientIp,
+        userAgent,
+        platform,
+        deviceName,
+        {
+          browserName: body.browserName || userAgent.split(' ')[0],
+          osVersion: body.osVersion || null,
+          appVersion: body.appVersion || '1.0.0',
+          batteryLevel: body.batteryLevel || 'Unavailable',
+          notificationState: body.notificationState || 'DEFAULT',
+          locale: body.locale || 'en-IN',
+        }
+      );
 
       // Check current terms version
       const currentTerms = await db

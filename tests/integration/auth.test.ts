@@ -19,7 +19,7 @@ describe('Auth & Registration Integration Suite', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        pno: '00987654', // String PNO with leading zero
+        pno: '009876543', // String PNO with leading zero (9 digits per V4.6)
         fullName: 'Vikram Aditya Singh',
         designationId: 'desig_const',
         districtId: 'dist_lucknow',
@@ -38,7 +38,7 @@ describe('Auth & Registration Integration Suite', () => {
 
     // Verify record in database preserves leading zero
     const userInDb = await db.prepare('SELECT * FROM users WHERE id = ?').bind(data.userId).first<any>();
-    expect(userInDb.pno).toBe('00987654');
+    expect(userInDb.pno).toBe('009876543');
     expect(userInDb.status).toBe('PENDING');
   });
 
@@ -47,7 +47,7 @@ describe('Auth & Registration Integration Suite', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        pno: '00987654',
+        pno: '009876543',
         fullName: 'विक्रम आदित्य सिंह', // Hindi name
         designationId: 'desig_const',
         districtId: 'dist_lucknow',
@@ -66,7 +66,7 @@ describe('Auth & Registration Integration Suite', () => {
 
   it('rejects duplicate PNO registration', async () => {
     const regPayload = {
-      pno: '11223344',
+      pno: '112233445', // 9 digits per V4.6
       fullName: 'Rajesh Sharma',
       designationId: 'desig_si',
       districtId: 'dist_lucknow',
@@ -97,7 +97,7 @@ describe('Auth & Registration Integration Suite', () => {
     await db
       .prepare(
         `INSERT INTO users (id, pno, full_name, designation_id, district_id, station_office_id, mobile, status, role, password_hash)
-         VALUES (?, '00554433', 'Sunil Kumar', 'desig_insp', 'dist_lucknow', 'stn_lko_hazratganj', '9876500000', 'ACTIVE', 'USER', ?)`
+         VALUES (?, '005544332', 'Sunil Kumar', 'desig_insp', 'dist_lucknow', 'stn_lko_hazratganj', '9876500000', 'ACTIVE', 'USER', ?)`
       )
       .bind(userId, pwHash)
       .run();
@@ -107,7 +107,7 @@ describe('Auth & Registration Integration Suite', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        pno: '00554433',
+        pno: '005544332',
         password: 'MySecretPass@123',
       }),
     });

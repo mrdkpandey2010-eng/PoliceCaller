@@ -19,9 +19,10 @@ export interface ContactData {
 
 export interface ContactRowProps {
   contact: ContactData;
-  onMessageClick: (contactId: string) => void;
+  onMessageClick?: (contactId: string) => void;
   onToggleFavorite?: (contactId: string) => void;
   onClick?: () => void;
+  showFullDetails?: boolean;
 }
 
 export const ContactRow: React.FC<ContactRowProps> = ({
@@ -29,6 +30,7 @@ export const ContactRow: React.FC<ContactRowProps> = ({
   onMessageClick,
   onToggleFavorite,
   onClick,
+  showFullDetails = false,
 }) => {
   const [copied, setCopied] = useState(false);
 
@@ -38,6 +40,35 @@ export const ContactRow: React.FC<ContactRowProps> = ({
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  // V4.7: On the Home personnel list card, display ONLY employee name and complete mobile number.
+  // Full details and actions (Call, Message, Favorite) are accessible in the single-person detail view upon click.
+  if (!showFullDetails) {
+    return (
+      <div
+        onClick={onClick}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onClick?.();
+          }
+        }}
+        aria-label={`View details for ${contact.fullName}`}
+        className="flex items-center justify-between p-4 bg-white dark:bg-slate-900 hover:bg-slate-50/90 dark:hover:bg-slate-800/80 rounded-2xl border border-slate-200/80 dark:border-slate-800 transition-all duration-150 cursor-pointer shadow-xs active:scale-[0.99]"
+      >
+        <div className="min-w-0 flex-1">
+          <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
+            {contact.fullName}
+          </h4>
+          <span className="text-xs font-mono font-semibold tracking-wide text-slate-600 dark:text-slate-300 block mt-1">
+            {contact.mobile}
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -65,7 +96,6 @@ export const ContactRow: React.FC<ContactRowProps> = ({
             {contact.designationName} • <span className="text-slate-500 dark:text-slate-400 font-normal">{contact.stationOfficeName}, {contact.districtName}</span>
           </p>
 
-          {/* Full Unmasked Mobile Number with Copy feedback */}
           <div className="flex items-center gap-2 mt-1">
             <span className="text-xs font-mono font-semibold tracking-wide text-slate-800 dark:text-slate-200">
               {contact.mobile}
@@ -105,21 +135,21 @@ export const ContactRow: React.FC<ContactRowProps> = ({
           </Button>
         )}
 
-        {/* Message Icon: Opens Departmental Chat */}
-        <Button
-          variant="primary"
-          size="icon"
-          onClick={(e) => {
-            e.stopPropagation();
-            onMessageClick(contact.id);
-          }}
-          aria-label={`Open chat with ${contact.fullName}`}
-          className="w-10 h-10 min-w-[40px] min-h-[40px] rounded-full bg-[#17324F] hover:bg-[#10243B] dark:bg-[#1E3E62] text-white p-0 shadow-sm"
-        >
-          <MessageSquare className="w-4 h-4" />
-        </Button>
+        {onMessageClick && (
+          <Button
+            variant="primary"
+            size="icon"
+            onClick={(e) => {
+              e.stopPropagation();
+              onMessageClick(contact.id);
+            }}
+            aria-label={`Open chat with ${contact.fullName}`}
+            className="w-10 h-10 min-w-[40px] min-h-[40px] rounded-full bg-[#17324F] hover:bg-[#10243B] dark:bg-[#1E3E62] text-white p-0 shadow-sm"
+          >
+            <MessageSquare className="w-4 h-4" />
+          </Button>
+        )}
 
-        {/* Call Icon: Native OS Phone Dialer Handoff */}
         <a
           href={`tel:${contact.mobile}`}
           onClick={(e) => e.stopPropagation()}

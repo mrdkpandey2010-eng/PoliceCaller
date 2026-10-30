@@ -1,27 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Avatar, Button, Input, Modal, Badge } from '@police-directory/ui';
-import {
-  LogOut,
-  Moon,
-  Sun,
-  Globe,
-  Smartphone,
-  ArrowRightLeft,
-  Shield,
-  Trash2,
-  Check,
-} from 'lucide-react';
+import { LogOut, ArrowRightLeft, Check } from 'lucide-react';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
-import { useTheme } from '../../context/ThemeContext';
 
 export const Profile: React.FC = () => {
   const { user, logout } = useAuth();
-  const { language, toggleLanguage } = useLanguage();
-  const { isDarkMode, toggleTheme } = useTheme();
+  const { language } = useLanguage();
 
-  const [devices, setDevices] = useState<any[]>([]);
   const [districts, setDistricts] = useState<any[]>([]);
   const [stations, setStations] = useState<any[]>([]);
 
@@ -35,15 +22,8 @@ export const Profile: React.FC = () => {
   const [transferMessage, setTransferMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    // Load active devices
-    api.getDevices().then((res) => {
-      // Filter own devices if regular user
-      const list = res.devices ? res.devices.filter((d: any) => d.user_id === user?.id) : [];
-      setDevices(list);
-    }).catch(() => {});
-
     api.getDistricts().then((res) => setDistricts(res.districts || []));
-  }, [user?.id]);
+  }, []);
 
   useEffect(() => {
     if (destDistrict) {
@@ -53,15 +33,6 @@ export const Profile: React.FC = () => {
       setDestStation('');
     }
   }, [destDistrict]);
-
-  const handleRevokeDevice = async (deviceId: string) => {
-    try {
-      await api.revokeDevice(deviceId);
-      setDevices((prev) => prev.filter((d) => d.id !== deviceId));
-    } catch (err: any) {
-      alert(err.message || 'Failed to revoke device');
-    }
-  };
 
   const handleRequestTransfer = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -144,94 +115,9 @@ export const Profile: React.FC = () => {
         </div>
       )}
 
-      {/* Preferences & Settings */}
-      <Card className="p-5 space-y-4">
-        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
-          Preferences & Controls
-        </h3>
 
-        <div className="flex items-center justify-between py-2 border-b border-slate-100 dark:border-slate-800">
-          <div className="flex items-center gap-2.5">
-            <Globe className="w-4 h-4 text-slate-500" />
-            <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
-              UI Language ({language === 'en' ? 'English' : 'हिंदी'})
-            </span>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={toggleLanguage}
-            aria-label="Toggle UI language"
-            className="text-xs font-bold rounded-lg px-3 py-1"
-          >
-            {language === 'en' ? 'हिंदी में बदलें' : 'Switch to English'}
-          </Button>
-        </div>
 
-        <div className="flex items-center justify-between py-2 border-b border-slate-100 dark:border-slate-800">
-          <div className="flex items-center gap-2.5">
-            {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-500" />}
-            <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
-              Appearance ({isDarkMode ? 'Dark Navy' : 'Light'})
-            </span>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={toggleTheme}
-            aria-label="Toggle dark mode theme"
-            className="text-xs font-bold rounded-lg px-3 py-1"
-          >
-            {isDarkMode ? 'Light Mode' : 'Dark Mode'}
-          </Button>
-        </div>
-      </Card>
 
-      {/* Active Device Sessions */}
-      <Card className="p-5 space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-            Active Device Sessions
-          </h3>
-          <span className="text-[11px] text-slate-500">Security Verified</span>
-        </div>
-
-        <div className="space-y-2">
-          {devices.length === 0 ? (
-            <p className="text-xs text-slate-400 py-2">Current browser session active.</p>
-          ) : (
-            devices.map((dev) => (
-              <div
-                key={dev.id}
-                className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-700/80"
-              >
-                <div className="flex items-center gap-3">
-                  <Smartphone className="w-5 h-5 text-slate-500" />
-                  <div>
-                    <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                      {dev.platform} • {dev.device_name || 'Standard Client'}
-                    </h4>
-                    <p className="text-[10px] text-slate-400">
-                      Last seen: {new Date(dev.last_seen_at).toLocaleString()}
-                    </p>
-                  </div>
-                </div>
-
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => handleRevokeDevice(dev.id)}
-                  aria-label="Revoke device session"
-                  title="Remote Revoke"
-                  className="w-8 h-8 rounded-full text-slate-400 hover:text-red-500 p-0"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </div>
-            ))
-          )}
-        </div>
-      </Card>
 
       {/* Logout */}
       <div className="pt-2">

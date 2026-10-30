@@ -178,7 +178,7 @@ export const AdminDashboard: React.FC = () => {
                 fullName: editFullName.trim(),
                 mobile: editMobile.trim(),
                 designationId: editDesignationId,
-                designationName: targetDesig ? targetDesig.nameEn : u.designationName,
+                designationName: targetDesig ? targetDesig.name : u.designationName,
                 email: editEmail.trim() || u.email,
               }
             : u
@@ -272,6 +272,21 @@ export const AdminDashboard: React.FC = () => {
       }
     } catch (err: any) {
       alert(err.message || 'Backup trigger failed');
+    }
+  };
+
+  const handleRevokeDevice = async (deviceId: string) => {
+    if (!confirm('Are you sure you want to revoke this active device session?')) return;
+    try {
+      const res = await api.revokeDevice(deviceId);
+      if (res.success) {
+        alert(res.message || 'Device and active session revoked.');
+        loadTabContent('devices');
+      } else {
+        alert(res.error || 'Failed to revoke device session.');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to revoke device session.');
     }
   };
 
@@ -911,6 +926,194 @@ export const AdminDashboard: React.FC = () => {
         </Card>
       )}
 
+      {/* Super Admin Privileged Tab: Device Management & Realistic Diagnostics (V4.9) */}
+      {activeTab === 'devices' && isSuperAdmin && (
+        <Card className="p-6 space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Smartphone className="h-4 w-4 text-teal-600" />
+                Active Device Logs & Diagnostics
+              </h3>
+              <p className="text-xs text-slate-500">
+                Authorized device sessions, network IP, client browser, notifications, and telemetry
+              </p>
+            </div>
+            <span className="text-xs font-semibold px-2.5 py-1 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-full">
+              {devices.length} Registered Sessions
+            </span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
+                  <th className="py-2.5 px-3">Personnel</th>
+                  <th className="py-2.5 px-3">Platform & Browser</th>
+                  <th className="py-2.5 px-3">Observed IP</th>
+                  <th className="py-2.5 px-3">Push & Battery</th>
+                  <th className="py-2.5 px-3">Locale</th>
+                  <th className="py-2.5 px-3">Last Seen</th>
+                  <th className="py-2.5 px-3">Status</th>
+                  <th className="py-2.5 px-3 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                {devices.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="py-8 text-center text-slate-400">
+                      No active device sessions found.
+                    </td>
+                  </tr>
+                ) : (
+                  devices.map((dev: any) => (
+                    <tr key={dev.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                      <td className="py-2.5 px-3">
+                        <div className="font-semibold text-slate-900 dark:text-white">
+                          {dev.userName || 'Unknown'}
+                        </div>
+                        <div className="text-[11px] text-slate-500 font-mono">
+                          PNO: {dev.userPno} • {dev.userDistrict}
+                        </div>
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <div className="font-medium text-slate-800 dark:text-slate-200">
+                          {dev.platform || 'Web'} • {dev.device_name || 'Generic Device'}
+                        </div>
+                        <div className="text-[11px] text-slate-400">
+                          {dev.browser_name || 'Standard Browser'}
+                        </div>
+                      </td>
+                      <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-300">
+                        {dev.ip_address || 'Not recorded'}
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                              dev.notification_state === 'GRANTED'
+                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                                : dev.notification_state === 'DENIED'
+                                ? 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300'
+                                : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                            }`}
+                          >
+                            Push: {dev.notification_state || 'DEFAULT'}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-500 mt-0.5">
+                          Battery: {dev.battery_level ? `${dev.battery_level}%` : 'Unavailable'}
+                        </div>
+                      </td>
+                      <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300">
+                        {dev.locale || 'en-IN'}
+                      </td>
+                      <td className="py-2.5 px-3 text-slate-500 text-[11px]">
+                        {new Date(dev.last_seen_at || dev.created_at).toLocaleString()}
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <Badge variant={dev.is_active ? 'success' : 'neutral'} size="sm">
+                          {dev.is_active ? 'Active' : 'Revoked'}
+                        </Badge>
+                      </td>
+                      <td className="py-2.5 px-3 text-right">
+                        {dev.is_active ? (
+                          <Button
+                            variant="danger"
+                            size="sm"
+                            aria-label="Revoke device session"
+                            onClick={() => handleRevokeDevice(dev.id)}
+                            className="text-[11px] py-1 px-2.5"
+                          >
+                            Revoke
+                          </Button>
+                        ) : (
+                          <span className="text-[11px] text-slate-400 italic">Terminated</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {/* Super Admin Privileged Tab: Audit Trail (V4.9) */}
+      {activeTab === 'audit' && isSuperAdmin && (
+        <Card className="p-6 space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <History className="h-4 w-4 text-teal-600" />
+                Immutable Audit Trail
+              </h3>
+              <p className="text-xs text-slate-500">
+                Server-side tamper-resistant record of privileged administrative actions
+              </p>
+            </div>
+            <span className="text-xs font-semibold px-2.5 py-1 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-full">
+              {auditLogs.length} Events Logged
+            </span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
+                  <th className="py-2.5 px-3">Timestamp</th>
+                  <th className="py-2.5 px-3">Actor</th>
+                  <th className="py-2.5 px-3">Action</th>
+                  <th className="py-2.5 px-3">Target Entity</th>
+                  <th className="py-2.5 px-3">District Scope</th>
+                  <th className="py-2.5 px-3">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-mono text-[11px]">
+                {auditLogs.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-8 text-center text-slate-400 font-sans text-xs">
+                      No audit events recorded yet.
+                    </td>
+                  </tr>
+                ) : (
+                  auditLogs.map((log: any) => (
+                    <tr key={log.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                      <td className="py-2.5 px-3 text-slate-500">
+                        {new Date(log.created_at).toLocaleString()}
+                      </td>
+                      <td className="py-2.5 px-3 font-sans">
+                        <span className="font-semibold text-slate-900 dark:text-white">
+                          {log.actor_pno || 'System'}
+                        </span>
+                        <span className="text-slate-400 text-[10px] ml-1">
+                          ({log.actor_role || 'SERVER'})
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 font-bold text-teal-700 dark:text-teal-400">
+                        {log.action}
+                      </td>
+                      <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300">
+                        {log.entity_type} {log.entity_id ? `(${log.entity_id.slice(0, 12)}...)` : ''}
+                      </td>
+                      <td className="py-2.5 px-3 font-sans text-slate-600 dark:text-slate-300">
+                        {log.district_scope || 'Statewide'}
+                      </td>
+                      <td className="py-2.5 px-3 font-sans">
+                        <Badge variant={log.status === 'SUCCESS' ? 'success' : 'danger'} size="sm">
+                          {log.status}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
       {/* Password Reset Modal */}
       <Modal
         isOpen={Boolean(resetModalUserId)}
@@ -1025,12 +1228,27 @@ export const AdminDashboard: React.FC = () => {
               onChange={(e) => setEditDesignationId(e.target.value)}
               className="w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border text-sm transition-colors duration-150 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#17324F]"
             >
-              <option value="">Select Designation...</option>
-              {designations.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.nameEn} ({d.cadre})
+              {designations.length === 0 ? (
+                <option value="" disabled>
+                  No designations available — contact Super Admin
                 </option>
-              ))}
+              ) : (
+                <>
+                  <option value="">Select Designation...</option>
+                  {/* Preserve historical/inactive designation of editing user if not in active list */}
+                  {editingUser?.designationId &&
+                    !designations.some((d) => d.id === editingUser.designationId) && (
+                      <option key={editingUser.designationId} value={editingUser.designationId}>
+                        {editingUser.designationName || editingUser.designationId} (Historical / Inactive)
+                      </option>
+                    )}
+                  {designations.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name} {d.shortName ? `(${d.shortName})` : ''}
+                    </option>
+                  ))}
+                </>
+              )}
             </select>
           </div>
 

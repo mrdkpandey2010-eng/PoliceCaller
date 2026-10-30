@@ -8,11 +8,11 @@ import { z } from 'zod';
 // Must not contain digits, zero-width characters, Devanagari/Hindi, emojis or other scripts.
 export const ASCII_NAME_REGEX = /^[A-Za-z][A-Za-z .'-]*[A-Za-z.]$/;
 
-// PNO regex: ASCII digits only, length between 6 and 12 digits (department string identifier), preserves leading zeros
-export const ASCII_PNO_REGEX = /^\d{6,12}$/;
+// PNO regex: exactly 9 or 10 ASCII digits, preserves leading zeros (V4.6)
+export const ASCII_PNO_REGEX = /^(?:[0-9]{9}|[0-9]{10})$/;
 
-// Indian Mobile regex: Exactly 10 ASCII digits starting with 6, 7, 8, or 9
-export const ASCII_MOBILE_REGEX = /^[6-9]\d{9}$/;
+// Mobile regex: exactly 10 ASCII digits (V4.6)
+export const ASCII_MOBILE_REGEX = /^[0-9]{10}$/;
 
 // Master / Code identifier regex: ASCII uppercase, numbers, underscores
 export const ASCII_CODE_REGEX = /^[A-Z0-9_]{2,30}$/;
@@ -48,7 +48,7 @@ export const PnoSchema = z
   .trim()
   .refine(
     (val) => !/[eE\+\.]/.test(val) && ASCII_PNO_REGEX.test(val),
-    { message: 'PNO must be a valid English numerical string (6-12 digits) with no decimals or scientific notation.' }
+    { message: 'PNO must be exactly 9 or 10 ASCII digits (gazetted officers without PNO may use their 10-digit mobile).' }
   );
 
 export const MobileSchema = z
@@ -56,7 +56,7 @@ export const MobileSchema = z
   .trim()
   .refine(
     (val) => ASCII_MOBILE_REGEX.test(val),
-    { message: 'Mobile must be exactly 10 ASCII digits starting with 6, 7, 8, or 9.' }
+    { message: 'Mobile must be exactly 10 ASCII digits.' }
   );
 
 export const WhatsAppSchema = z

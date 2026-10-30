@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import crypto from 'node:crypto';
 import { D1Database } from '../db/d1-adapter';
 import { AuthenticatedUser } from '../services/auth';
+import { logAuditEvent } from '../services/audit';
 
 // In-memory ephemeral stores for typing and presence
 const typingStore = new Map<string, { userId: string; userName: string; timestamp: number }>();
@@ -85,12 +86,27 @@ export function createChatRouter(db: D1Database) {
       )
       LEFT JOIN users sender ON last_m.sender_id = sender.id
       WHERE cm.user_id = ?
+        AND NOT EXISTS (
+          SELECT 1 FROM conversation_user_visibility cuv
+          WHERE cuv.conversation_id = c.id
+            AND cuv.user_id = ?
+            AND cuv.is_hidden = 1
+            AND NOT EXISTS (
+              SELECT 1 FROM messages nm
+              WHERE nm.conversation_id = c.id
+                AND nm.sequence_num > cuv.last_hidden_sequence_num
+                AND NOT EXISTS (
+                  SELECT 1 FROM user_message_visibility v
+                  WHERE v.message_id = nm.id AND v.user_id = ? AND v.is_hidden = 1
+                )
+            )
+        )
       ORDER BY c.updated_at DESC
     `;
 
     const { results } = await db
       .prepare(sql)
-      .bind(user.id, user.id, user.id, user.id, user.id, user.id, user.id)
+      .bind(user.id, user.id, user.id, user.id, user.id, user.id, user.id, user.id, user.id)
       .all();
 
     return c.json({ success: true, conversations: results });
@@ -195,8 +211,8 @@ export function createChatRouter(db: D1Database) {
     }
   });
 
-  // GET /api/chat/messages/:conversationId - Paginated message history
-  router.get('/messages/:conversationId', async (c) => {
+  // GET /api/chat/messages/:conversationId & /conversations/:conversationId/messages - Paginated message history
+  const handleGetMessages = async (c: any) => {
     const user = c.get('user');
     if (!user) return c.json({ error: 'Unauthorized' }, 401);
 
@@ -228,11 +244,18 @@ export function createChatRouter(db: D1Database) {
           SELECT 1 FROM user_message_visibility v 
           WHERE v.message_id = m.id AND v.user_id = ? AND v.is_hidden = 1
         )
+        AND m.sequence_num > IFNULL((
+          SELECT cuv.last_hidden_sequence_num
+          FROM conversation_user_visibility cuv
+          WHERE cuv.conversation_id = m.conversation_id
+            AND cuv.user_id = ?
+            AND cuv.is_hidden = 1
+        ), 0)
       ORDER BY m.sequence_num ASC
       LIMIT ?
     `;
 
-    const { results } = await db.prepare(sql).bind(convId, user.id, limit).all();
+    const { results } = await db.prepare(sql).bind(convId, user.id, user.id, limit).all();
 
     // Update last_read_message_id for current user
     if (results.length > 0) {
@@ -276,7 +299,10 @@ export function createChatRouter(db: D1Database) {
     });
 
     return c.json({ success: true, messages: enrichedMessages });
-  });
+  };
+
+  router.get('/messages/:conversationId', handleGetMessages);
+  router.get('/conversations/:conversationId/messages', handleGetMessages);
 
   // POST /api/chat/messages - Send message
   router.post('/messages', async (c) => {
@@ -364,6 +390,16 @@ export function createChatRouter(db: D1Database) {
       return c.json({ error: 'Message not found.' }, 404);
     }
 
+    // Verify user is an authorized participant
+    const member = await db
+      .prepare('SELECT id FROM conversation_members WHERE conversation_id = ? AND user_id = ?')
+      .bind(msg.conversation_id, user.id)
+      .first();
+
+    if (!member) {
+      return c.json({ error: 'Access denied: You are not a participant in this conversation.' }, 403);
+    }
+
     const tombstoneId = `vis_${crypto.randomUUID()}`;
     const now = new Date().toISOString();
 
@@ -376,11 +412,19 @@ export function createChatRouter(db: D1Database) {
       .bind(tombstoneId, user.id, messageId, now)
       .run();
 
+    await logAuditEvent(db, {
+      actor: user,
+      action: 'DELETE_MESSAGE_FOR_ME',
+      entityType: 'MESSAGE',
+      entityId: messageId,
+      afterState: { conversationId: msg.conversation_id },
+    });
+
     return c.json({ success: true, message: 'Message deleted for you.' });
   });
 
   // POST /api/chat/conversations/:conversationId/delete-for-me
-  // Hides all prior messages in the conversation for the current user without affecting other participants
+  // Hides conversation and all prior messages for current user without affecting other participants
   router.post('/conversations/:conversationId/delete-for-me', async (c) => {
     const user = c.get('user');
     if (!user) return c.json({ error: 'Unauthorized' }, 401);
@@ -388,6 +432,35 @@ export function createChatRouter(db: D1Database) {
     const convId = c.req.param('conversationId');
     const now = new Date().toISOString();
 
+    // Verify user is a member of this conversation
+    const member = await db
+      .prepare('SELECT id FROM conversation_members WHERE conversation_id = ? AND user_id = ?')
+      .bind(convId, user.id)
+      .first();
+
+    if (!member) {
+      return c.json({ error: 'Access denied: You are not a participant in this conversation.' }, 403);
+    }
+
+    // Find current maximum sequence number in conversation
+    const seqRow = await db
+      .prepare('SELECT IFNULL(MAX(sequence_num), 0) as maxSeq FROM messages WHERE conversation_id = ?')
+      .bind(convId)
+      .first<any>();
+    const maxSeq = seqRow ? seqRow.maxSeq : 0;
+
+    // Record conversation tombstone for current user
+    const visConvId = `convvis_${crypto.randomUUID()}`;
+    await db
+      .prepare(
+        `INSERT INTO conversation_user_visibility (id, user_id, conversation_id, is_hidden, hidden_at, last_hidden_sequence_num)
+         VALUES (?, ?, ?, 1, ?, ?)
+         ON CONFLICT(user_id, conversation_id) DO UPDATE SET is_hidden = 1, hidden_at = excluded.hidden_at, last_hidden_sequence_num = excluded.last_hidden_sequence_num`
+      )
+      .bind(visConvId, user.id, convId, now, maxSeq)
+      .run();
+
+    // Also hide existing individual messages so new messages will re-expose the conversation without resurrecting history
     const msgs = await db
       .prepare('SELECT id FROM messages WHERE conversation_id = ?')
       .bind(convId)
@@ -404,7 +477,15 @@ export function createChatRouter(db: D1Database) {
         .run();
     }
 
-    return c.json({ success: true, message: 'Conversation cleared for you.' });
+    await logAuditEvent(db, {
+      actor: user,
+      action: 'DELETE_CONVERSATION_FOR_ME',
+      entityType: 'CONVERSATION',
+      entityId: convId,
+      afterState: { lastHiddenSequenceNum: maxSeq },
+    });
+
+    return c.json({ success: true, message: 'Conversation deleted for you.' });
   });
 
   // POST /api/chat/presence/heartbeat - Realtime presence heartbeat

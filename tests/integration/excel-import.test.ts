@@ -35,7 +35,7 @@ describe('Excel Bulk Import, Dry-Run & Rollback Suite', () => {
     await db
       .prepare(
         `INSERT INTO users (id, pno, full_name, designation_id, district_id, station_office_id, mobile, status, role, password_hash)
-         VALUES ('usr_existing_imp', '00888888', 'Existing Officer', 'desig_const', 'dist_lucknow', 'stn_lko_hazratganj', '9888888888', 'ACTIVE', 'USER', 'hash')`
+         VALUES ('usr_existing_imp', '008888888', 'Existing Officer', 'desig_const', 'dist_lucknow', 'stn_lko_hazratganj', '9888888888', 'ACTIVE', 'USER', 'hash')`
       )
       .run();
 
@@ -105,7 +105,7 @@ describe('Excel Bulk Import, Dry-Run & Rollback Suite', () => {
         headers: validHeaders,
         rows: [
           {
-            PNO: '00999999',
+            PNO: '009999999',
             Name: 'Varanasi Bound Officer',
             Post: 'Sub-Inspector of Police',
             District: 'Varanasi', // Different district!
@@ -137,9 +137,9 @@ describe('Excel Bulk Import, Dry-Run & Rollback Suite', () => {
         fileName: 'valid_personnel.xlsx',
         headers: validHeaders,
         rows: [
-          // Update existing user (00888888)
+          // Update existing user (008888888)
           {
-            PNO: '00888888',
+            PNO: '008888888',
             Name: 'Updated Officer Name',
             Post: 'Sub-Inspector of Police',
             District: 'Lucknow',
@@ -148,9 +148,9 @@ describe('Excel Bulk Import, Dry-Run & Rollback Suite', () => {
             Status: 'ACTIVE',
             Remarks: 'Promoted via batch order',
           },
-          // New user (00555555)
+          // New user (005555555)
           {
-            PNO: '00555555',
+            PNO: '005555555',
             Name: 'Brand New Recruit',
             Post: 'Constable',
             District: 'Lucknow',
@@ -186,10 +186,10 @@ describe('Excel Bulk Import, Dry-Run & Rollback Suite', () => {
     expect(commitRes.status).toBe(200);
 
     // Verify DB state after commit
-    const updatedUser = await db.prepare('SELECT full_name FROM users WHERE pno = ?').bind('00888888').first<any>();
+    const updatedUser = await db.prepare('SELECT full_name FROM users WHERE pno = ?').bind('008888888').first<any>();
     expect(updatedUser.full_name).toBe('Updated Officer Name');
 
-    const newUser = await db.prepare('SELECT full_name FROM users WHERE pno = ?').bind('00555555').first<any>();
+    const newUser = await db.prepare('SELECT full_name FROM users WHERE pno = ?').bind('005555555').first<any>();
     expect(newUser.full_name).toBe('Brand New Recruit');
 
     // 3. Rollback the batch
@@ -205,11 +205,11 @@ describe('Excel Bulk Import, Dry-Run & Rollback Suite', () => {
 
     // 4. Verify DB state after rollback
     // Existing user's name should be restored to 'Existing Officer'
-    const restoredUser = await db.prepare('SELECT full_name FROM users WHERE pno = ?').bind('00888888').first<any>();
+    const restoredUser = await db.prepare('SELECT full_name FROM users WHERE pno = ?').bind('008888888').first<any>();
     expect(restoredUser.full_name).toBe('Existing Officer');
 
     // Newly imported user should be removed
-    const deletedNewUser = await db.prepare('SELECT * FROM users WHERE pno = ?').bind('00555555').first();
+    const deletedNewUser = await db.prepare('SELECT * FROM users WHERE pno = ?').bind('005555555').first();
     expect(deletedNewUser).toBeNull();
   });
 });

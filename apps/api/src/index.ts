@@ -10,6 +10,7 @@ import { createNoticesRouter } from './routes/notices';
 import { createAdminRouter } from './routes/admin';
 import { createExcelRouter } from './routes/excel';
 import { createMastersRouter } from './routes/masters';
+import { createDiariesRouter } from './routes/diaries';
 
 export interface Env {
   DB: D1Database;
@@ -109,6 +110,7 @@ export function createApp(dbInstance?: D1Database) {
   app.route('/api/admin', createAdminRouter(targetDb));
   app.route('/api/admin/excel', createExcelRouter(targetDb));
   app.route('/api/masters', createMastersRouter(targetDb));
+  app.route('/api/diaries', createDiariesRouter(targetDb));
 
   return app;
 }

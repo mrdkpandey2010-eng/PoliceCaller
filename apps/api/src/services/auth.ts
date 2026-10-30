@@ -48,7 +48,15 @@ export async function createSession(
   ipAddress?: string,
   userAgent?: string,
   platform: 'WEB' | 'ANDROID' | 'IOS' = 'WEB',
-  deviceName: string = 'Standard Client'
+  deviceName: string = 'Standard Client',
+  diagnostics?: {
+    browserName?: string;
+    osVersion?: string;
+    appVersion?: string;
+    batteryLevel?: string;
+    notificationState?: string;
+    locale?: string;
+  }
 ): Promise<{ token: string; sessionId: string; expiresAt: string }> {
   const token = generateToken();
   const tokenHash = hashToken(token);
@@ -59,16 +67,36 @@ export async function createSession(
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
   const now = new Date().toISOString();
 
-  // Create or update device record
+  // Create or update device record with diagnostics (V4.9)
   await db
     .prepare(
-      `INSERT INTO devices (id, user_id, platform, device_name, is_active, last_seen_at)
-       VALUES (?, ?, ?, ?, 1, ?)
+      `INSERT INTO devices 
+       (id, user_id, platform, device_name, os_version, app_version, is_active, last_seen_at,
+        ip_address, browser_name, notification_state, battery_level, locale)
+       VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(user_id, platform, device_name) DO UPDATE SET
          is_active = 1,
-         last_seen_at = excluded.last_seen_at`
+         last_seen_at = excluded.last_seen_at,
+         ip_address = excluded.ip_address,
+         browser_name = excluded.browser_name,
+         notification_state = excluded.notification_state,
+         battery_level = excluded.battery_level,
+         locale = excluded.locale`
     )
-    .bind(deviceId, userId, platform, deviceName, now)
+    .bind(
+      deviceId,
+      userId,
+      platform,
+      deviceName,
+      diagnostics?.osVersion || null,
+      diagnostics?.appVersion || '1.0.0',
+      now,
+      ipAddress || '127.0.0.1',
+      diagnostics?.browserName || (userAgent?.slice(0, 50) || 'Browser'),
+      diagnostics?.notificationState || 'DEFAULT',
+      diagnostics?.batteryLevel || 'Unavailable',
+      diagnostics?.locale || 'en-IN'
+    )
     .run();
 
   // Insert session

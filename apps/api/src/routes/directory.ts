@@ -24,8 +24,9 @@ export function createDirectoryRouter(db: D1Database) {
     const stationId = c.req.query('stationId');
     const designationId = c.req.query('designationId');
     const favoritesOnly = c.req.query('favorites') === 'true';
-    const limit = Math.min(Number(c.req.query('limit')) || 100, 200);
-    const offset = Number(c.req.query('offset')) || 0;
+    const limit = Math.min(Number(c.req.query('limit')) || 50, 50); // V4.7: exactly max 50 records per page
+    const page = Math.max(Number(c.req.query('page')) || 1, 1);
+    const offset = c.req.query('offset') ? Number(c.req.query('offset')) : (page - 1) * limit;
 
     // Track search query in recent_searches if provided
     if (q && q.length >= 2) {
@@ -94,6 +95,9 @@ export function createDirectoryRouter(db: D1Database) {
       );
     }
 
+    const { results: countRes } = await db.prepare(sql.replace(/SELECT\s+u\.id[\s\S]+?FROM/, 'SELECT count(*) as total FROM')).bind(...params).all<any>();
+    const totalCount = countRes?.[0]?.total || 0;
+
     // Default sorting: Prioritize user's assigned station/office first, then rank order, then name
     sql += `
       ORDER BY 
@@ -109,9 +113,16 @@ export function createDirectoryRouter(db: D1Database) {
     return c.json({
       success: true,
       contacts: results,
+      total: totalCount,
+      page,
+      limit,
+      totalPages: Math.ceil(totalCount / limit) || 1,
       pagination: {
+        page,
         limit,
         offset,
+        total: totalCount,
+        totalPages: Math.ceil(totalCount / limit) || 1,
         count: results.length,
       },
     });
@@ -166,6 +177,89 @@ export function createDirectoryRouter(db: D1Database) {
 
     await db.prepare('DELETE FROM recent_searches WHERE user_id = ?').bind(user.id).run();
     return c.json({ success: true, message: 'Search history cleared.' });
+  });
+
+  // GET /api/directory/co-admins (V4.4: Search District Co-Admins for all approved authenticated users)
+  router.get('/co-admins', async (c) => {
+    const user = c.get('user');
+    if (!user) return c.json({ error: 'Unauthorized' }, 401);
+    if (user.status !== 'ACTIVE') {
+      return c.json({ error: 'Directory access restricted to approved active personnel.' }, 403);
+    }
+
+    const q = (c.req.query('q') || '').trim();
+    const districtId = c.req.query('districtId');
+
+    let sql = `
+      SELECT u.id, u.pno, u.full_name as fullName, u.mobile, u.email,
+             u.district_id as districtId, d.name as districtName,
+             des.name as designationName, des.short_name as designationShort,
+             s.name as stationOfficeName
+      FROM users u
+      JOIN districts d ON u.district_id = d.id
+      LEFT JOIN designations des ON u.designation_id = des.id
+      LEFT JOIN stations_offices s ON u.station_office_id = s.id
+      WHERE u.role = 'DISTRICT_CO_ADMIN' AND u.status = 'ACTIVE'
+    `;
+    const params: any[] = [];
+
+    if (districtId) {
+      sql += ' AND u.district_id = ?';
+      params.push(districtId);
+    }
+
+    if (q) {
+      sql += ' AND (u.full_name LIKE ? OR u.pno LIKE ? OR u.mobile LIKE ? OR d.name LIKE ?)';
+      const wildcard = `%${q}%`;
+      params.push(wildcard, wildcard, wildcard, wildcard);
+    }
+
+    sql += ' ORDER BY d.name ASC, u.full_name ASC';
+    const { results } = await db.prepare(sql).bind(...params).all();
+    return c.json({ success: true, coAdmins: results });
+  });
+
+  // GET /api/directory/stations-offices (V4.4: Search police stations and offices with real contact numbers)
+  router.get('/stations-offices', async (c) => {
+    const user = c.get('user');
+    if (!user) return c.json({ error: 'Unauthorized' }, 401);
+    if (user.status !== 'ACTIVE') {
+      return c.json({ error: 'Directory access restricted to approved active personnel.' }, 403);
+    }
+
+    const districtId = c.req.query('districtId');
+    const type = c.req.query('type'); // 'POLICE_STATION' | 'OFFICE' | undefined
+    const q = (c.req.query('q') || '').trim();
+
+    let sql = `
+      SELECT s.id, s.name, s.type, s.address, s.phone, s.district_id as districtId,
+             d.name as districtName
+      FROM stations_offices s
+      JOIN districts d ON s.district_id = d.id
+      WHERE s.is_active = 1
+    `;
+    const params: any[] = [];
+
+    if (districtId) {
+      sql += ' AND s.district_id = ?';
+      params.push(districtId);
+    }
+
+    if (type === 'POLICE_STATION') {
+      sql += " AND s.type = 'POLICE_STATION'";
+    } else if (type === 'OFFICE') {
+      sql += " AND s.type != 'POLICE_STATION'";
+    }
+
+    if (q) {
+      sql += ' AND (s.name LIKE ? OR d.name LIKE ? OR s.phone LIKE ?)';
+      const wildcard = `%${q}%`;
+      params.push(wildcard, wildcard, wildcard);
+    }
+
+    sql += ' ORDER BY d.name ASC, s.name ASC';
+    const { results } = await db.prepare(sql).bind(...params).all();
+    return c.json({ success: true, stationsOffices: results });
   });
 
   return router;

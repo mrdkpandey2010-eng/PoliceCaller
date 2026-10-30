@@ -33,6 +33,73 @@ export const AppContent: React.FC = () => {
   const [activeTab, setActiveTab] = useState<NavTab>('directory');
   const [targetChatUserId, setTargetChatUserId] = useState<string | null>(null);
 
+  // V4.8: Navigation history and Android Hardware Back vs Home
+  const navigateToTab = (tab: NavTab) => {
+    if (tab === activeTab) return;
+    setActiveTab(tab);
+    window.history.pushState({ tab }, '', '#' + tab);
+  };
+
+  React.useEffect(() => {
+    if (!window.history.state) {
+      window.history.replaceState({ tab: 'directory' }, '', '#directory');
+    }
+
+    const handlePopState = (event: PopStateEvent) => {
+      // 1. Dismiss active modal, sheet or dialog first
+      const activeModalCloseBtn = document.querySelector(
+        '[aria-label="Back to Directory"], [aria-label="Close modal"], [aria-label="Close"]'
+      ) as HTMLElement | null;
+
+      if (activeModalCloseBtn) {
+        activeModalCloseBtn.click();
+        return;
+      }
+
+      // 2. Return to previous tab or directory home
+      const targetTab = (event.state?.tab as NavTab) || 'directory';
+      setActiveTab(targetTab);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
+    // Capacitor Android hardware back listener
+    let capacitorListener: any = null;
+    const setupCapacitor = async () => {
+      try {
+        const anyWindow = window as any;
+        if (anyWindow.Capacitor?.isNativePlatform?.() && anyWindow.Capacitor?.Plugins?.App) {
+          capacitorListener = await anyWindow.Capacitor.Plugins.App.addListener('backButton', () => {
+            const activeModalCloseBtn = document.querySelector(
+              '[aria-label="Back to Directory"], [aria-label="Close modal"], [aria-label="Close"]'
+            ) as HTMLElement | null;
+
+            if (activeModalCloseBtn) {
+              activeModalCloseBtn.click();
+              return;
+            }
+
+            if (activeTab !== 'directory') {
+              navigateToTab('directory');
+            } else {
+              anyWindow.Capacitor.Plugins.App.exitApp();
+            }
+          });
+        }
+      } catch (err) {
+        // Running in browser web mode
+      }
+    };
+    setupCapacitor();
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      if (capacitorListener?.remove) {
+        capacitorListener.remove();
+      }
+    };
+  }, [activeTab]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-100 dark:bg-slate-950">
@@ -70,12 +137,12 @@ export const AppContent: React.FC = () => {
 
   const handleOpenChatWithUser = (userId: string) => {
     setTargetChatUserId(userId);
-    setActiveTab('chats');
+    navigateToTab('chats');
   };
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
-      {/* Polished Top Bar */}
+      {/* Polished Top Bar - In-App Home Action (V4.8) */}
       <TopBar
         title={t('auth.loginTitle')}
         language={language}
@@ -83,7 +150,8 @@ export const AppContent: React.FC = () => {
         isDarkMode={isDarkMode}
         onToggleTheme={toggleTheme}
         unreadNoticesCount={0}
-        onNotificationsClick={() => setActiveTab('notices')}
+        onHomeClick={() => navigateToTab('directory')}
+        onNotificationsClick={() => navigateToTab('notices')}
         onLogout={logout}
       />
 
@@ -91,7 +159,7 @@ export const AppContent: React.FC = () => {
       <div className="hidden md:flex items-center justify-center bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 shadow-xs">
         <div className="flex items-center gap-2 py-2 max-w-7xl mx-auto px-4">
           <button
-            onClick={() => setActiveTab('directory')}
+            onClick={() => navigateToTab('directory')}
             className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all ${
               activeTab === 'directory'
                 ? 'bg-[#17324F] text-white shadow-sm'
@@ -101,7 +169,7 @@ export const AppContent: React.FC = () => {
             {language === 'hi' ? 'निर्देशिका' : 'Directory'}
           </button>
           <button
-            onClick={() => setActiveTab('chats')}
+            onClick={() => navigateToTab('chats')}
             className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all ${
               activeTab === 'chats'
                 ? 'bg-[#17324F] text-white shadow-sm'
@@ -111,7 +179,7 @@ export const AppContent: React.FC = () => {
             {language === 'hi' ? 'संदेश' : 'Chats'}
           </button>
           <button
-            onClick={() => setActiveTab('notices')}
+            onClick={() => navigateToTab('notices')}
             className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all ${
               activeTab === 'notices'
                 ? 'bg-[#17324F] text-white shadow-sm'
@@ -122,7 +190,7 @@ export const AppContent: React.FC = () => {
           </button>
           {isAdmin && (
             <button
-              onClick={() => setActiveTab('admin')}
+              onClick={() => navigateToTab('admin')}
               className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all ${
                 activeTab === 'admin'
                   ? 'bg-[#17324F] text-white shadow-sm'
@@ -133,7 +201,7 @@ export const AppContent: React.FC = () => {
             </button>
           )}
           <button
-            onClick={() => setActiveTab('profile')}
+            onClick={() => navigateToTab('profile')}
             className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all ${
               activeTab === 'profile'
                 ? 'bg-[#17324F] text-white shadow-sm'
@@ -168,7 +236,7 @@ export const AppContent: React.FC = () => {
       {/* Mobile Bottom Navigation (Strictly NO Calls Tab) */}
       <BottomNav
         activeTab={activeTab}
-        onTabChange={(tab) => setActiveTab(tab)}
+        onTabChange={(tab) => navigateToTab(tab)}
         showAdminTab={isAdmin}
       />
 

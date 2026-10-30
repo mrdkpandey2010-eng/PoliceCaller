@@ -19,11 +19,16 @@ export async function applyMigrations(db: D1Database, migrationsDir?: string, se
   const baseMigrationsDir = migrationsDir || path.resolve(process.cwd(), 'db/migrations');
   const baseSeedsDir = seedsDir || path.resolve(process.cwd(), 'db/seeds');
 
-  // Apply schema migration
-  const schemaFile = path.join(baseMigrationsDir, '0001_initial_schema.sql');
-  if (fs.existsSync(schemaFile)) {
-    const schemaSql = fs.readFileSync(schemaFile, 'utf-8');
-    await db.exec(schemaSql);
+  // Apply schema migrations in sorted order
+  if (fs.existsSync(baseMigrationsDir)) {
+    const migrationFiles = fs
+      .readdirSync(baseMigrationsDir)
+      .filter((f) => f.endsWith('.sql'))
+      .sort();
+    for (const f of migrationFiles) {
+      const sql = fs.readFileSync(path.join(baseMigrationsDir, f), 'utf-8');
+      await db.exec(sql);
+    }
   }
 
   // Apply seeds

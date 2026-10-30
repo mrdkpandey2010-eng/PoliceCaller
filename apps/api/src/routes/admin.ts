@@ -257,8 +257,8 @@ export function createAdminRouter(db: D1Database) {
     });
   });
 
-  // PUT /api/admin/users/:userId/details - Update structured user details (PNO immutable)
-  router.put('/users/:userId/details', async (c) => {
+  // PUT & PATCH /api/admin/users/:userId/details - Update structured user details (PNO immutable)
+  const handleUpdateUserDetails = async (c: any) => {
     const user = c.get('user')!;
     const targetUserId = c.req.param('userId');
     const body = await c.req.json();
@@ -282,8 +282,8 @@ export function createAdminRouter(db: D1Database) {
     }
 
     if (mobile) {
-      if (!/^[6-9]\d{9}$/.test(mobile)) {
-        return c.json({ error: 'Mobile must be a valid 10-digit Indian mobile number.' }, 422);
+      if (!/^[0-9]{10}$/.test(mobile)) {
+        return c.json({ error: 'Mobile must be exactly 10 ASCII digits.' }, 422);
       }
     }
 
@@ -321,7 +321,10 @@ export function createAdminRouter(db: D1Database) {
     });
 
     return c.json({ success: true, message: 'User details updated successfully.' });
-  });
+  };
+
+  router.put('/users/:userId/details', handleUpdateUserDetails);
+  router.patch('/users/:userId/details', handleUpdateUserDetails);
 
   // POST /api/admin/users/:userId/reset-password - Single-use reset token or new password
   router.post('/users/:userId/reset-password', async (c) => {

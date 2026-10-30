@@ -37,31 +37,34 @@ describe('Strict English-Only Structured Data Validation', () => {
     expect(() => EnglishNameSchema.parse('Rajesh\u200BKumar')).toThrowError();
   });
 
-  it('validates PNO as a string and preserves leading zeros', () => {
-    expect(PnoSchema.parse('00123456')).toBe('00123456');
-    expect(PnoSchema.parse('987654321')).toBe('987654321');
+  it('validates PNO as a string of exactly 9 or 10 digits and preserves leading zeros (V4.6)', () => {
+    expect(PnoSchema.parse('001234567')).toBe('001234567'); // 9 digits with leading zeros
+    expect(PnoSchema.parse('0098765432')).toBe('0098765432'); // 10 digits with leading zeros
+    expect(PnoSchema.parse('9876543210')).toBe('9876543210'); // 10 digits (gazetted officer PNO=mobile)
   });
 
-  it('rejects scientific notation, decimals, and non-digit characters in PNO', () => {
+  it('rejects scientific notation, decimals, non-digits, and invalid lengths (8, 11) in PNO (V4.6)', () => {
     expect(() => PnoSchema.parse('1.23E+07')).toThrowError();
     expect(() => PnoSchema.parse('123456.78')).toThrowError();
     expect(() => PnoSchema.parse('PNO123456')).toThrowError();
-    expect(() => PnoSchema.parse('१२३४५६')).toThrowError(); // Hindi numerals
-    expect(() => PnoSchema.parse('12345')).toThrowError(); // Too short (< 6 digits)
+    expect(() => PnoSchema.parse('१२३४५६७८९')).toThrowError(); // Hindi numerals
+    expect(() => PnoSchema.parse('12345678')).toThrowError(); // Length 8 (rejected)
+    expect(() => PnoSchema.parse('12345678901')).toThrowError(); // Length 11 (rejected)
   });
 
-  it('validates 10-digit Indian mobile numbers starting with 6, 7, 8, or 9', () => {
+  it('validates exactly 10-digit ASCII mobile numbers (V4.6)', () => {
     expect(MobileSchema.parse('9876543210')).toBe('9876543210');
     expect(MobileSchema.parse('6234567890')).toBe('6234567890');
     expect(MobileSchema.parse('7012345678')).toBe('7012345678');
-    expect(MobileSchema.parse('8912345678')).toBe('8912345678');
+    expect(MobileSchema.parse('1234567890')).toBe('1234567890'); // 10 digits
+    expect(MobileSchema.parse('0012345678')).toBe('0012345678'); // 10 digits with leading zero
   });
 
-  it('rejects invalid mobile numbers, country codes, spaces, or letters', () => {
-    expect(() => MobileSchema.parse('1234567890')).toThrowError();
+  it('rejects invalid mobile numbers, country codes, spaces, or letters (V4.6)', () => {
     expect(() => MobileSchema.parse('+919876543210')).toThrowError();
     expect(() => MobileSchema.parse('98765 43210')).toThrowError();
     expect(() => MobileSchema.parse('987654321')).toThrowError(); // 9 digits
+    expect(() => MobileSchema.parse('98765432101')).toThrowError(); // 11 digits
     expect(() => MobileSchema.parse('९८७६५४३२१०')).toThrowError(); // Devanagari digits
   });
 });
@@ -86,7 +89,7 @@ describe('Excel Header and Row Validation', () => {
 
   it('validates a correct Excel row', () => {
     const row = {
-      PNO: '00987654',
+      PNO: '009876543',
       Name: 'Ajay Pratap Singh',
       Post: 'Inspector',
       District: 'Lucknow',
@@ -98,7 +101,7 @@ describe('Excel Header and Row Validation', () => {
       Remarks: 'Verified service record',
     };
     const parsed = ExcelRowSchema.parse(row);
-    expect(parsed.PNO).toBe('00987654');
+    expect(parsed.PNO).toBe('009876543');
     expect(parsed.Name).toBe('Ajay Pratap Singh');
   });
 

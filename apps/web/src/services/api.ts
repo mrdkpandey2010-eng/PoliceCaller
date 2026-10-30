@@ -65,6 +65,47 @@ export const api = {
 
   clearRecentSearches: () => request('/directory/recent-searches', { method: 'DELETE' }),
 
+  // Directory Search (V4.4: Search Stations, Offices, and District Co-Admins)
+  searchCoAdmins: (params: { q?: string; districtId?: string } = {}) => {
+    const sp = new URLSearchParams();
+    if (params.q) sp.append('q', params.q);
+    if (params.districtId) sp.append('districtId', params.districtId);
+    return request(`/directory/co-admins?${sp.toString()}`);
+  },
+
+  searchStationsOffices: (params: { q?: string; districtId?: string; type?: 'POLICE_STATION' | 'OFFICE' } = {}) => {
+    const sp = new URLSearchParams();
+    if (params.q) sp.append('q', params.q);
+    if (params.districtId) sp.append('districtId', params.districtId);
+    if (params.type) sp.append('type', params.type);
+    return request(`/directory/stations-offices?${sp.toString()}`);
+  },
+
+  // Contact Diaries (V4.5)
+  getContactDiaries: (params: { category?: string; districtId?: string; q?: string } = {}) => {
+    const sp = new URLSearchParams();
+    if (params.category) sp.append('category', params.category);
+    if (params.districtId) sp.append('districtId', params.districtId);
+    if (params.q) sp.append('q', params.q);
+    return request(`/diaries?${sp.toString()}`);
+  },
+
+  createContactDiary: (payload: {
+    title: string;
+    description?: string;
+    category: string;
+    districtId?: string;
+    sourceDate: string;
+    fileType: 'URL' | 'PDF' | 'XLSX' | 'XLS' | 'CSV';
+    externalUrl?: string;
+    fileName?: string;
+    fileData?: string;
+    fileSize?: number;
+    mimeType?: string;
+  }) => request('/diaries', { method: 'POST', body: JSON.stringify(payload) }),
+
+  deleteContactDiary: (id: string) => request(`/diaries/${id}`, { method: 'DELETE' }),
+
   // Chat
   getConversations: () => request('/chat/conversations'),
 
