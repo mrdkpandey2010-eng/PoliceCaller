@@ -54,11 +54,16 @@ export const Login: React.FC<LoginProps> = ({ onNavigateToRegister }) => {
         setMatchedUser(res);
         setStage('password');
       } else {
-        setError(
-          language === 'hi'
-            ? 'यह PNO / मोबाइल नंबर पंजीकृत नहीं है। कृपया अपने जिला को-एडमिन से संपर्क करें।'
-            : 'PNO / Mobile number not registered. Please contact your District Co-Admin.'
-        );
+        // Not registered / incorrect user -> navigate directly to English-only registration form
+        if (onNavigateToRegister) {
+          onNavigateToRegister(cleanId);
+        } else {
+          setError(
+            language === 'hi'
+              ? 'यह PNO / मोबाइल नंबर पंजीकृत नहीं है। कृपया पंजीकरण करें।'
+              : 'PNO / Mobile number not registered. Please register.'
+          );
+        }
       }
     } catch (err: any) {
       setError(err.message || 'Lookup failed. Please verify connection.');
