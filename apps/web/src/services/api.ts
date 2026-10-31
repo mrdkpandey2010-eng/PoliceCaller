@@ -73,11 +73,13 @@ export const api = {
     return request(`/directory/co-admins?${sp.toString()}`);
   },
 
-  searchStationsOffices: (params: { q?: string; districtId?: string; type?: 'POLICE_STATION' | 'OFFICE' } = {}) => {
+  searchStationsOffices: (params: { q?: string; districtId?: string; type?: 'POLICE_STATION' | 'OFFICE'; page?: number; limit?: number } = {}) => {
     const sp = new URLSearchParams();
     if (params.q) sp.append('q', params.q);
     if (params.districtId) sp.append('districtId', params.districtId);
     if (params.type) sp.append('type', params.type);
+    if (params.page) sp.append('page', String(params.page));
+    if (params.limit) sp.append('limit', String(params.limit));
     return request(`/directory/stations-offices?${sp.toString()}`);
   },
 
@@ -152,7 +154,10 @@ export const api = {
   getNoticeReport: (noticeId: string) => request(`/notices/${noticeId}/report`),
 
   // Transfers
-  getTransfers: () => request('/transfers'),
+  getTransfers: (params?: { status?: string }) => {
+    const qs = params?.status ? `?status=${encodeURIComponent(params.status)}` : '';
+    return request(`/transfers${qs}`);
+  },
 
   createTransfer: (payload: any) =>
     request('/transfers', { method: 'POST', body: JSON.stringify(payload) }),
@@ -183,6 +188,12 @@ export const api = {
     request(`/admin/users/${userId}/reset-password`, { method: 'POST', body: JSON.stringify({ newPassword }) }),
 
   getCoAdmins: () => request('/admin/coadmins'),
+
+  getCoAdminExcelImportSetting: (): Promise<{ success: boolean; enabled: boolean }> =>
+    request('/admin/settings/coadmin-excel-import'),
+
+  setCoAdminExcelImportSetting: (payload: { enabled: boolean }): Promise<{ success: boolean; enabled: boolean; message: string }> =>
+    request('/admin/settings/coadmin-excel-import', { method: 'POST', body: JSON.stringify(payload) }),
 
   assignCoAdmin: (userId: string) =>
     request(`/admin/coadmins/${userId}/assign`, { method: 'POST' }),

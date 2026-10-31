@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { SearchBar, Button, Badge } from '@police-directory/ui';
-import { Building, Phone, MapPin, Filter, X } from 'lucide-react';
+import { Building, Phone, MapPin, Filter, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { api } from '../../services/api';
 
 export interface DirectoryStationsOfficesProps {
@@ -14,8 +14,13 @@ export const DirectoryStationsOffices: React.FC<DirectoryStationsOfficesProps> =
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Pagination State (Max 100 per page, max 3 pages)
+  const [page, setPage] = useState<number>(1);
+  const pageSize = 100;
+
   const fetchItems = async () => {
     setLoading(true);
+    setPage(1);
     try {
       const res = await api.searchStationsOffices({
         q: searchQuery,
@@ -119,45 +124,109 @@ export const DirectoryStationsOffices: React.FC<DirectoryStationsOfficesProps> =
             <p className="text-xs text-slate-400 mt-1">Try selecting another district or broadening your search keyword.</p>
           </div>
         ) : (
-          items.map((item) => (
-            <div
-              key={item.id}
-              className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
-            >
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
-                    {item.name}
-                  </h4>
-                  <Badge variant={item.type === 'POLICE_STATION' ? 'teal' : 'primary'} size="sm">
-                    {item.type === 'POLICE_STATION' ? 'Police Station' : item.type.replace('_', ' ')}
-                  </Badge>
-                </div>
+          (() => {
+            const totalItems = items.length;
+            const totalPages = Math.min(Math.ceil(totalItems / pageSize) || 1, 3);
+            const displayedItems = items.slice((page - 1) * pageSize, page * pageSize);
 
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-1">
-                  <MapPin className="w-3.5 h-3.5 text-[#147D84]" />
-                  <span>District: <strong className="text-slate-700 dark:text-slate-300">{item.districtName}</strong></span>
-                  {item.address && <span className="truncate ml-1">• {item.address}</span>}
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2 shrink-0">
-                {item.phone ? (
-                  <a
-                    href={`tel:${item.phone}`}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-colors"
+            return (
+              <>
+                {displayedItems.map((item) => (
+                  <div
+                    key={item.id}
+                    className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
                   >
-                    <Phone className="w-3.5 h-3.5" />
-                    <span className="font-mono">{item.phone}</span>
-                  </a>
-                ) : (
-                  <span className="text-xs font-medium text-slate-400 italic">
-                    Not available
-                  </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
+                          {item.name}
+                        </h4>
+                        <Badge variant={item.type === 'POLICE_STATION' ? 'teal' : 'primary'} size="sm">
+                          {item.type === 'POLICE_STATION' ? 'Police Station' : item.type.replace('_', ' ')}
+                        </Badge>
+                      </div>
+
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-1">
+                        <MapPin className="w-3.5 h-3.5 text-[#147D84]" />
+                        <span>District: <strong className="text-slate-700 dark:text-slate-300">{item.districtName}</strong></span>
+                        {item.address && <span className="truncate ml-1">• {item.address}</span>}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      {item.phone ? (
+                        <a
+                          href={`tel:${item.phone}`}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-colors"
+                        >
+                          <Phone className="w-3.5 h-3.5" />
+                          <span className="font-mono">{item.phone}</span>
+                        </a>
+                      ) : (
+                        <span className="text-xs font-medium text-slate-400 italic">
+                          Not available
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+
+                {/* Pagination Controls (Max 100/page, max 3 pages) */}
+                {totalItems > 0 && (
+                  <div className="mt-5 pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between flex-wrap gap-2 text-xs text-slate-600 dark:text-slate-400">
+                    <div>
+                      Showing{' '}
+                      <strong className="text-slate-900 dark:text-white">
+                        {(page - 1) * pageSize + 1}-{Math.min(page * pageSize, totalItems)}
+                      </strong>{' '}
+                      of <strong className="text-slate-900 dark:text-white">{totalItems}</strong> units
+                      {totalPages > 1 && (
+                        <span className="ml-1 text-slate-400">
+                          (Page {page} of {totalPages})
+                        </span>
+                      )}
+                    </div>
+
+                    {totalPages > 1 && (
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => setPage((p) => Math.max(p - 1, 1))}
+                          disabled={page <= 1}
+                          className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-700 transition flex items-center gap-1"
+                        >
+                          <ChevronLeft className="h-3.5 w-3.5" />
+                          Prev
+                        </button>
+
+                        {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                          <button
+                            key={p}
+                            onClick={() => setPage(p)}
+                            className={`h-7 w-7 rounded-lg text-xs font-bold transition ${
+                              page === p
+                                ? 'bg-[#17324F] text-white shadow-xs'
+                                : 'border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50'
+                            }`}
+                          >
+                            {p}
+                          </button>
+                        ))}
+
+                        <button
+                          onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
+                          disabled={page >= totalPages}
+                          className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-700 transition flex items-center gap-1"
+                        >
+                          Next
+                          <ChevronRight className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 )}
-              </div>
-            </div>
-          ))
+              </>
+            );
+          })()
         )}
       </div>
     </div>

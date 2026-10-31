@@ -24,6 +24,19 @@ export function createExcelRouter(db: D1Database) {
       return c.json({ error: 'Admin privileges required' }, 403);
     }
 
+    if (user.role === ROLES.DISTRICT_CO_ADMIN) {
+      try {
+        const setting = await db
+          .prepare("SELECT value FROM system_settings WHERE key = 'coadmin_excel_import_enabled'")
+          .first<any>();
+        if (setting && setting.value === 'false') {
+          return c.json({ error: 'Excel bulk import is currently disabled for District Co-Admins by Super Admin.' }, 403);
+        }
+      } catch {
+        // Table not present yet in test environment
+      }
+    }
+
     try {
       const body = await c.req.json();
       const { fileName, headers, rows } = body;
@@ -223,6 +236,19 @@ export function createExcelRouter(db: D1Database) {
     const user = c.get('user');
     if (!user || (user.role !== ROLES.SUPER_ADMIN && user.role !== ROLES.DISTRICT_CO_ADMIN)) {
       return c.json({ error: 'Admin privileges required' }, 403);
+    }
+
+    if (user.role === ROLES.DISTRICT_CO_ADMIN) {
+      try {
+        const setting = await db
+          .prepare("SELECT value FROM system_settings WHERE key = 'coadmin_excel_import_enabled'")
+          .first<any>();
+        if (setting && setting.value === 'false') {
+          return c.json({ error: 'Excel bulk import is currently disabled for District Co-Admins by Super Admin.' }, 403);
+        }
+      } catch {
+        // Table not present yet in test environment
+      }
     }
 
     try {

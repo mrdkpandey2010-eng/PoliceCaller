@@ -24,8 +24,9 @@ export function createDirectoryRouter(db: D1Database) {
     const stationId = c.req.query('stationId');
     const designationId = c.req.query('designationId');
     const favoritesOnly = c.req.query('favorites') === 'true';
-    const limit = Math.min(Number(c.req.query('limit')) || 50, 50); // V4.7: exactly max 50 records per page
-    const page = Math.max(Number(c.req.query('page')) || 1, 1);
+    const requestedLimit = Number(c.req.query('limit'));
+    const limit = Math.min(requestedLimit || 100, 100); // Max 100 records per page
+    const page = Math.min(Math.max(Number(c.req.query('page')) || 1, 1), 3); // Max 3 pages
     const offset = c.req.query('offset') ? Number(c.req.query('offset')) : (page - 1) * limit;
 
     // Track search query in recent_searches if provided
@@ -49,7 +50,7 @@ export function createDirectoryRouter(db: D1Database) {
       JOIN stations_offices s ON u.station_office_id = s.id
       JOIN designations des ON u.designation_id = des.id
       LEFT JOIN favorites fav ON (fav.user_id = ? AND fav.target_user_id = u.id)
-      WHERE u.status = 'ACTIVE'
+      WHERE u.status = 'ACTIVE' AND u.role != 'SUPER_ADMIN'
     `;
 
     const params: any[] = [user.id];
@@ -110,19 +111,22 @@ export function createDirectoryRouter(db: D1Database) {
 
     const { results } = await db.prepare(sql).bind(...params).all();
 
+    const computedPages = Math.ceil(totalCount / limit) || 1;
+    const totalPages = Math.min(computedPages, 3); // Max 3 pages visible
+
     return c.json({
       success: true,
       contacts: results,
       total: totalCount,
       page,
       limit,
-      totalPages: Math.ceil(totalCount / limit) || 1,
+      totalPages,
       pagination: {
         page,
         limit,
         offset,
         total: totalCount,
-        totalPages: Math.ceil(totalCount / limit) || 1,
+        totalPages,
         count: results.length,
       },
     });
@@ -215,11 +219,16 @@ export function createDirectoryRouter(db: D1Database) {
     }
 
     sql += ' ORDER BY d.name ASC, u.full_name ASC';
+    // Max 8 co-admins by default when no district filter is selected
+    if (!districtId) {
+      sql += ' LIMIT 8';
+    }
+
     const { results } = await db.prepare(sql).bind(...params).all();
     return c.json({ success: true, coAdmins: results });
   });
 
-  // GET /api/directory/stations-offices (V4.4: Search police stations and offices with real contact numbers)
+  // GET /api/directory/stations-offices (V4.4 & V5: Search police stations and offices with pagination, max 100/page, max 3 pages)
   router.get('/stations-offices', async (c) => {
     const user = c.get('user');
     if (!user) return c.json({ error: 'Unauthorized' }, 401);
@@ -230,6 +239,10 @@ export function createDirectoryRouter(db: D1Database) {
     const districtId = c.req.query('districtId');
     const type = c.req.query('type'); // 'POLICE_STATION' | 'OFFICE' | undefined
     const q = (c.req.query('q') || '').trim();
+    const requestedLimit = Number(c.req.query('limit'));
+    const limit = Math.min(requestedLimit || 100, 100);
+    const page = Math.min(Math.max(Number(c.req.query('page')) || 1, 1), 3);
+    const offset = (page - 1) * limit;
 
     let sql = `
       SELECT s.id, s.name, s.type, s.address, s.phone, s.district_id as districtId,
@@ -257,9 +270,26 @@ export function createDirectoryRouter(db: D1Database) {
       params.push(wildcard, wildcard, wildcard);
     }
 
-    sql += ' ORDER BY d.name ASC, s.name ASC';
-    const { results } = await db.prepare(sql).bind(...params).all();
-    return c.json({ success: true, stationsOffices: results });
+    // Count total for pagination
+    const { results: countRes } = await db
+      .prepare(sql.replace(/SELECT\s+s\.id[\s\S]+?FROM/, 'SELECT count(*) as total FROM'))
+      .bind(...params)
+      .all<any>();
+    const totalCount = countRes?.[0]?.total || 0;
+    const computedPages = Math.ceil(totalCount / limit) || 1;
+    const totalPages = Math.min(computedPages, 3);
+
+    // If limit parameter was explicitly set or if paginating, apply LIMIT & OFFSET
+    sql += ' ORDER BY d.name ASC, s.name ASC LIMIT ? OFFSET ?';
+    const { results } = await db.prepare(sql).bind(...params, limit, offset).all();
+    return c.json({
+      success: true,
+      stationsOffices: results,
+      total: totalCount,
+      page,
+      limit,
+      totalPages,
+    });
   });
 
   return router;

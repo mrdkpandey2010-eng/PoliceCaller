@@ -42,11 +42,11 @@ export const Directory: React.FC<DirectoryProps> = ({ onOpenChat }) => {
   const [stations, setStations] = useState<any[]>([]);
   const [designations, setDesignations] = useState<any[]>([]);
 
-  // Pagination State (V4.7: max 50 per page)
+  // Pagination State (Max 100 per page, max 3 pages)
   const [page, setPage] = useState<number>(1);
   const [totalCount, setTotalCount] = useState<number>(0);
   const [totalPages, setTotalPages] = useState<number>(1);
-  const limit = 50;
+  const limit = 100;
 
   // Filter selections
   const [selectedDistrict, setSelectedDistrict] = useState<string>('');
@@ -89,7 +89,7 @@ export const Directory: React.FC<DirectoryProps> = ({ onOpenChat }) => {
       });
       setContacts(res.contacts || []);
       setTotalCount(res.total || 0);
-      setTotalPages(res.totalPages || 1);
+      setTotalPages(Math.min(res.totalPages || 1, 3));
     } catch {
       setContacts([]);
       setTotalCount(0);
@@ -399,15 +399,20 @@ export const Directory: React.FC<DirectoryProps> = ({ onOpenChat }) => {
             )}
           </div>
 
-          {/* V4.7 Server-Side Pagination Controls (Max 50/page) */}
+          {/* Server-Side Pagination Controls (Max 100/page, max 3 pages) */}
           {!loading && totalCount > 0 && (
-            <div className="mt-5 pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
+            <div className="mt-5 pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between flex-wrap gap-2 text-xs text-slate-600 dark:text-slate-400">
               <div>
                 Showing{' '}
                 <strong className="text-slate-900 dark:text-white">
                   {(page - 1) * limit + 1}-{Math.min(page * limit, totalCount)}
                 </strong>{' '}
                 of <strong className="text-slate-900 dark:text-white">{totalCount}</strong> personnel
+                {totalPages > 1 && (
+                  <span className="ml-1 text-slate-400">
+                    (Page {page} of {totalPages})
+                  </span>
+                )}
               </div>
 
               <div className="flex items-center gap-1.5">
@@ -420,9 +425,19 @@ export const Directory: React.FC<DirectoryProps> = ({ onOpenChat }) => {
                   Prev
                 </button>
 
-                <span className="px-2 font-semibold text-slate-800 dark:text-slate-200">
-                  {page} / {totalPages}
-                </span>
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => setPage(p)}
+                    className={`h-7 w-7 rounded-lg text-xs font-bold transition ${
+                      page === p
+                        ? 'bg-[#17324F] text-white shadow-xs'
+                        : 'border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50'
+                    }`}
+                  >
+                    {p}
+                  </button>
+                ))}
 
                 <button
                   onClick={() => setPage((p) => Math.min(p + 1, totalPages))}

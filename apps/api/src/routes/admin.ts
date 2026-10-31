@@ -177,7 +177,8 @@ export function createAdminRouter(db: D1Database) {
     const params: any[] = [];
 
     if (user.role === ROLES.DISTRICT_CO_ADMIN) {
-      sql += ` AND u.district_id = ?`;
+      // Co-Admin control tab: never show Super Admin in personnel records
+      sql += ` AND u.district_id = ? AND u.role != 'SUPER_ADMIN'`;
       params.push(user.districtId);
     } else if (districtId) {
       sql += ` AND u.district_id = ?`;
@@ -588,6 +589,60 @@ export function createAdminRouter(db: D1Database) {
     const body = await c.req.json();
     const result = await restoreFromBackup(db, body.backupJobId, user);
     return c.json(result);
+  });
+
+  // GET /api/admin/settings/coadmin-excel-import - Check if Co-Admin Excel Bulk Import is enabled
+  router.get('/settings/coadmin-excel-import', async (c) => {
+    try {
+      const row = await db
+        .prepare("SELECT value FROM system_settings WHERE key = 'coadmin_excel_import_enabled'")
+        .first<any>();
+      const enabled = row ? row.value === 'true' : true;
+      return c.json({ success: true, enabled });
+    } catch {
+      return c.json({ success: true, enabled: true });
+    }
+  });
+
+  // POST /api/admin/settings/coadmin-excel-import - Super Admin toggle for Co-Admin Excel Bulk Import
+  router.post('/settings/coadmin-excel-import', async (c) => {
+    const user = c.get('user')!;
+    if (user.role !== ROLES.SUPER_ADMIN) {
+      return c.json({ error: 'Forbidden: Only Super Admin can configure Co-Admin feature permissions.' }, 403);
+    }
+    const body = await c.req.json();
+    const enabled = Boolean(body.enabled);
+    const value = enabled ? 'true' : 'false';
+
+    try {
+      await db
+        .prepare(`INSERT INTO system_settings (key, value, updated_at) VALUES ('coadmin_excel_import_enabled', ?, CURRENT_TIMESTAMP)
+                  ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`)
+        .bind(value)
+        .run();
+    } catch {
+      // Fallback if table doesn't exist yet
+      await db.exec(`CREATE TABLE IF NOT EXISTS system_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP))`);
+      await db
+        .prepare(`INSERT INTO system_settings (key, value, updated_at) VALUES ('coadmin_excel_import_enabled', ?, CURRENT_TIMESTAMP)
+                  ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`)
+        .bind(value)
+        .run();
+    }
+
+    await logAuditEvent(db, {
+      actor: user,
+      action: enabled ? 'ENABLE_COADMIN_EXCEL_IMPORT' : 'DISABLE_COADMIN_EXCEL_IMPORT',
+      entityType: 'SYSTEM_SETTING',
+      entityId: 'coadmin_excel_import_enabled',
+      afterState: { enabled },
+    });
+
+    return c.json({
+      success: true,
+      enabled,
+      message: `District Co-Admin Excel Bulk Import has been ${enabled ? 'enabled' : 'disabled'} successfully.`,
+    });
   });
 
   return router;

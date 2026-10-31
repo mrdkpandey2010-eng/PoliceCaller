@@ -22,6 +22,10 @@ export function createTransfersRouter(db: D1Database) {
     const user = c.get('user');
     if (!user) return c.json({ error: 'Unauthorized' }, 401);
 
+    if (user.role === ROLES.SUPER_ADMIN) {
+      return c.json({ error: 'Super Admin posting is permanent at State Headquarters level.' }, 403);
+    }
+
     try {
       const body = await c.req.json();
       const validated = CreateTransferSchema.parse(body);
@@ -113,6 +117,9 @@ export function createTransfersRouter(db: D1Database) {
     const user = c.get('user');
     if (!user) return c.json({ error: 'Unauthorized' }, 401);
 
+    const statusFilter = c.req.query('status');
+    const whereClauses: string[] = [];
+
     let sql = `
       SELECT 
         tr.*,
@@ -139,12 +146,21 @@ export function createTransfersRouter(db: D1Database) {
       // Super Admin sees all statewide
     } else if (user.role === ROLES.DISTRICT_CO_ADMIN) {
       // Co-Admin sees transfers involving their district (either incoming as destination or outgoing as source)
-      sql += ` WHERE tr.destination_district_id = ? OR tr.source_district_id = ?`;
+      whereClauses.push('(tr.destination_district_id = ? OR tr.source_district_id = ?)');
       params.push(user.districtId, user.districtId);
     } else {
       // Regular user sees only own transfer requests
-      sql += ` WHERE tr.user_id = ?`;
+      whereClauses.push('tr.user_id = ?');
       params.push(user.id);
+    }
+
+    if (statusFilter) {
+      whereClauses.push('tr.status = ?');
+      params.push(statusFilter);
+    }
+
+    if (whereClauses.length > 0) {
+      sql += ` WHERE ${whereClauses.join(' AND ')}`;
     }
 
     sql += ` ORDER BY tr.created_at DESC LIMIT 100`;

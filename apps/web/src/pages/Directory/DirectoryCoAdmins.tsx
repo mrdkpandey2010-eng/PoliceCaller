@@ -134,9 +134,9 @@ export const DirectoryCoAdmins: React.FC<DirectoryCoAdminsProps> = ({ districts,
         </div>
       )}
 
-      {/* Co-Admin Cards */}
+      {/* Co-Admin Cards: Max 8 by default, strictly selected district when filtered */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {coAdmins.map((admin) => (
+        {(selectedDistrict ? coAdmins.filter((a) => a.districtId === selectedDistrict) : coAdmins.slice(0, 8)).map((admin) => (
           <div
             key={admin.id}
             className="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col justify-between"

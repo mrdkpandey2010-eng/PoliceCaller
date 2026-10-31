@@ -15,6 +15,7 @@ async function runMigrations() {
   const files = [
     path.join(rootDir, 'db/migrations/0001_initial_schema.sql'),
     path.join(rootDir, 'db/migrations/0002_v4_targeted_fixes.sql'),
+    path.join(rootDir, 'db/migrations/0003_v5_directory_transfers_settings.sql'),
     path.join(rootDir, 'db/seeds/districts.sql'),
     path.join(rootDir, 'db/seeds/designations.sql'),
     path.join(rootDir, 'db/seeds/police_stations_1878.sql'),

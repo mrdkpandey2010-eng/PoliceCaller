@@ -42,6 +42,10 @@ export const AdminDashboard: React.FC = () => {
   const [backupStatus, setBackupStatus] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Super Admin Control: Co-Admin Excel Bulk Import toggle (Requirement 5)
+  const [coAdminExcelEnabled, setCoAdminExcelEnabled] = useState<boolean>(true);
+  const [togglingExcel, setTogglingExcel] = useState<boolean>(false);
+
   // Password reset modal state
   const [resetModalUserId, setResetModalUserId] = useState<string | null>(null);
   const [newPasswordInput, setNewPasswordInput] = useState('');
@@ -82,7 +86,28 @@ export const AdminDashboard: React.FC = () => {
 
   useEffect(() => {
     fetchOverview();
+    api
+      .getCoAdminExcelImportSetting()
+      .then((res) => {
+        if (res && typeof res.enabled === 'boolean') {
+          setCoAdminExcelEnabled(res.enabled);
+        }
+      })
+      .catch(() => {});
   }, []);
+
+  const handleToggleCoAdminExcel = async () => {
+    setTogglingExcel(true);
+    try {
+      const next = !coAdminExcelEnabled;
+      const res = await api.setCoAdminExcelImportSetting({ enabled: next });
+      setCoAdminExcelEnabled(res.enabled);
+    } catch (err: any) {
+      alert(err.message || 'Failed to update Excel import permission.');
+    } finally {
+      setTogglingExcel(false);
+    }
+  };
 
   const loadTabContent = async (tab: string) => {
     setActiveTab(tab);
@@ -100,8 +125,9 @@ export const AdminDashboard: React.FC = () => {
           setDesignations(desigRes.designations);
         }
       } else if (tab === 'transfers') {
-        const res = await api.getTransfers();
-        setTransfers(res.transfers || []);
+        const res = await api.getTransfers({ status: 'PENDING' });
+        const pending = (res.transfers || []).filter((tr: any) => tr.status === 'PENDING');
+        setTransfers(pending);
       } else if (tab === 'coadmins' && isSuperAdmin) {
         const res = await api.getCoAdmins();
         setCoAdmins(res.coAdmins || []);
@@ -256,7 +282,7 @@ export const AdminDashboard: React.FC = () => {
   const handleReviewTransfer = async (transferId: string, action: 'APPROVE' | 'REJECT') => {
     try {
       await api.reviewTransfer({ transferId, action });
-      loadTabContent('transfers');
+      setTransfers((prev) => prev.filter((t) => t.id !== transferId));
       fetchOverview();
     } catch (err: any) {
       alert(err.message || 'Transfer review failed');
@@ -302,6 +328,8 @@ export const AdminDashboard: React.FC = () => {
   };
 
   const filteredUsers = usersList.filter((u) => {
+    // Requirement 3: Super Admin card must NOT be visible in Co-Admin's control tab personnel records
+    if (!isSuperAdmin && u.role === ROLES.SUPER_ADMIN) return false;
     if (!userSearchQuery.trim()) return true;
     const q = userSearchQuery.toLowerCase();
     return (
@@ -391,17 +419,19 @@ export const AdminDashboard: React.FC = () => {
         >
           Transfers Review
         </button>
-        <button
-          onClick={() => setActiveTab('excel')}
-          className={`px-3 py-2 rounded-xl font-bold transition-colors shrink-0 flex items-center gap-1 ${
-            activeTab === 'excel'
-              ? 'bg-[#17324F] text-white'
-              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-          }`}
-        >
-          <FileSpreadsheet className="w-3.5 h-3.5" />
-          Excel Bulk Import
-        </button>
+        {(isSuperAdmin || coAdminExcelEnabled) && (
+          <button
+            onClick={() => setActiveTab('excel')}
+            className={`px-3 py-2 rounded-xl font-bold transition-colors shrink-0 flex items-center gap-1 ${
+              activeTab === 'excel'
+                ? 'bg-[#17324F] text-white'
+                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5" />
+            Excel Bulk Import
+          </button>
+        )}
 
         {/* Super Admin Privileged Tabs */}
         {isSuperAdmin && (
@@ -498,6 +528,44 @@ export const AdminDashboard: React.FC = () => {
               </p>
             </Card>
           </div>
+
+          {/* Super Admin Control: Co-Admin Excel Bulk Import Toggle (Requirement 5) */}
+          {isSuperAdmin && (
+            <Card className="p-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              <div className="flex items-center justify-between flex-wrap gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-teal-50 dark:bg-teal-950 flex items-center justify-center text-[#147D84]">
+                    <FileSpreadsheet className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                      Co-Admin Excel Bulk Import Control (एक्सेल बल्क इम्पोर्ट नियंत्रण)
+                      <Badge variant={coAdminExcelEnabled ? 'success' : 'neutral'} size="sm">
+                        {coAdminExcelEnabled ? 'Visible to Co-Admins' : 'Hidden from Co-Admins'}
+                      </Badge>
+                    </h4>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Toggle whether District Co-Admins can view and use the Excel Bulk Import tool in their district command consoles.
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  aria-label="Toggle Excel bulk import visibility for Co-Admins"
+                  onClick={handleToggleCoAdminExcel}
+                  disabled={togglingExcel}
+                  variant={coAdminExcelEnabled ? 'danger' : 'primary'}
+                  size="sm"
+                  className="font-bold text-xs"
+                >
+                  {togglingExcel
+                    ? 'Updating...'
+                    : coAdminExcelEnabled
+                    ? 'Hide from Co-Admins (छिपाएं)'
+                    : 'Show to Co-Admins (दिखाएं)'}
+                </Button>
+              </div>
+            </Card>
+          )}
         </div>
       )}
 
@@ -685,41 +753,42 @@ export const AdminDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Tab: Transfers Review */}
+      {/* Tab: Transfers Review (Requirement 4: Clean queue, no completed logs) */}
       {activeTab === 'transfers' && (
         <div className="space-y-3">
-          <div className="p-3 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 rounded-xl text-xs text-blue-900 dark:text-blue-200 font-medium">
-            Transfer Approval Precedence: Either the <strong>Destination District Co-Admin</strong> or the <strong>Super Admin</strong> may approve a transfer into the destination post.
+          <div className="p-3 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-xl text-xs text-blue-900 dark:text-blue-200 font-medium">
+            Transfer Approval Precedence: Either the <strong>Destination District Co-Admin</strong> or the <strong>Super Admin</strong> may approve a transfer into the destination post. Approved and rejected requests are automatically removed from this review queue to maintain a clean workspace.
           </div>
 
-          {transfers.length === 0 ? (
+          {transfers.filter((tr) => tr.status === 'PENDING').length === 0 ? (
             <Card className="p-8 text-center text-slate-400 text-xs">
-              No transfer requests in this queue.
+              No pending transfer requests in this review queue. All transfer reviews are up to date.
             </Card>
           ) : (
-            transfers.map((tr) => (
-              <Card key={tr.id} className="p-4 flex items-center justify-between flex-wrap gap-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                      {tr.userName} ({tr.userDesignation})
-                    </h4>
-                    <span className="text-xs font-mono text-slate-400">PNO: {tr.userPno}</span>
-                    <Badge variant={tr.status === 'APPROVED' ? 'success' : tr.status === 'REJECTED' ? 'danger' : 'warning'} size="sm">
-                      {tr.status}
-                    </Badge>
+            transfers
+              .filter((tr) => tr.status === 'PENDING')
+              .map((tr) => (
+                <Card key={tr.id} className="p-4 flex items-center justify-between flex-wrap gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                        {tr.userName} ({tr.userDesignation})
+                      </h4>
+                      <span className="text-xs font-mono text-slate-400">PNO: {tr.userPno}</span>
+                      <Badge variant="warning" size="sm">
+                        PENDING
+                      </Badge>
+                    </div>
+
+                    <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">
+                      Route: <strong className="text-slate-800 dark:text-slate-200">{tr.sourceStationName}, {tr.sourceDistrictName}</strong> ➔ <strong className="text-[#147D84]">{tr.destinationStationName}, {tr.destinationDistrictName}</strong>
+                    </p>
+
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Reason: {tr.reason} {tr.order_reference ? `(Ref: ${tr.order_reference})` : ''}
+                    </p>
                   </div>
 
-                  <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">
-                    Route: <strong className="text-slate-800 dark:text-slate-200">{tr.sourceStationName}, {tr.sourceDistrictName}</strong> ➔ <strong className="text-[#147D84]">{tr.destinationStationName}, {tr.destinationDistrictName}</strong>
-                  </p>
-
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Reason: {tr.reason} {tr.order_reference ? `(Ref: ${tr.order_reference})` : ''}
-                  </p>
-                </div>
-
-                {tr.status === 'PENDING' && (
                   <div className="flex items-center gap-2">
                     <Button
                       variant="danger"
@@ -740,15 +809,19 @@ export const AdminDashboard: React.FC = () => {
                       Approve & Post
                     </Button>
                   </div>
-                )}
-              </Card>
-            ))
+                </Card>
+              ))
           )}
         </div>
       )}
 
-      {/* Tab: Excel Bulk Import */}
-      {activeTab === 'excel' && <ExcelImport />}
+      {/* Tab: Excel Bulk Import (Requirement 5) */}
+      {activeTab === 'excel' && (isSuperAdmin || coAdminExcelEnabled) && <ExcelImport />}
+      {activeTab === 'excel' && !isSuperAdmin && !coAdminExcelEnabled && (
+        <Card className="p-8 text-center text-slate-500 text-xs">
+          Excel Bulk Import has been disabled by the State Super Admin.
+        </Card>
+      )}
 
       {/* Privileged Tab: District Co-Admins Management (Super Admin Exclusive Tool) */}
       {activeTab === 'coadmins' && isSuperAdmin && (
