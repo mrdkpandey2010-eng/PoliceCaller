@@ -29,7 +29,7 @@ const translations: Record<string, Record<Language, string>> = {
   'directory.noResults': { en: 'No matching personnel found.', hi: 'कोई कार्मिक नहीं मिला।' },
 
   // Auth & Validation
-  'auth.loginTitle': { en: 'Uttar Pradesh Police Portal', hi: 'उत्तर प्रदेश पुलिस पोर्टल' },
+  'auth.loginTitle': { en: 'CCTNS Caller', hi: 'CCTNS कॉलर' },
   'auth.pnoLabel': { en: 'Personnel Number (PNO)', hi: 'कार्मिक नंबर (PNO)' },
   'auth.passwordLabel': { en: 'Password', hi: 'पासवर्ड' },
   'auth.loginBtn': { en: 'Login to Directory', hi: 'लॉग इन करें' },

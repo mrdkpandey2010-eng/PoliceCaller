@@ -97,12 +97,28 @@ def main():
     print(f"             Size: {file_size_mb:.2f} MB")
     print()
 
-    bot_token = sys.argv[1] if len(sys.argv) > 1 else ""
-    chat_id = sys.argv[2] if len(sys.argv) > 2 else ""
+    # Get credentials from arguments, environment or default
+    bot_token = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("TELEGRAM_BOT_TOKEN", "8988345891:AAEl6FXgqQhil6oz4X3ABRiZbuyInwGLFw8")
+    chat_id = sys.argv[2] if len(sys.argv) > 2 else os.environ.get("TELEGRAM_CHAT_ID", "")
 
     if not bot_token:
         print("Telegram Bot Token (from @BotFather):")
         bot_token = input("Enter BOT_TOKEN: ").strip()
+
+    if not chat_id:
+        # Check getUpdates automatically to see if a recent message exists
+        try:
+            req = urllib.request.Request(f"https://api.telegram.org/bot{bot_token}/getUpdates")
+            with urllib.request.urlopen(req, timeout=10) as r:
+                updates = json.loads(r.read().decode())
+                if updates.get("ok") and updates.get("result"):
+                    last_msg = updates["result"][-1]
+                    chat_id = str(last_msg.get("message", {}).get("chat", {}).get("id", ""))
+                    if chat_id:
+                        user_name = last_msg.get("message", {}).get("chat", {}).get("first_name", "User")
+                        print(f"[AUTO-DETECTED] Found your Chat ID: {chat_id} ({user_name})")
+        except Exception:
+            pass
 
     if not chat_id:
         print("\nTelegram Chat ID (your numeric ID or channel username e.g. 123456789):")

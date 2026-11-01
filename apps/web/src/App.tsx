@@ -135,9 +135,9 @@ export const AppContent: React.FC = () => {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-100 dark:bg-slate-950">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 border-3 border-[#17324F] dark:border-teal-400 border-t-transparent rounded-full animate-spin" />
-          <p className="text-xs font-bold text-[#17324F] dark:text-teal-400 tracking-wider">
-            UP POLICE PORTAL
+          <img src="/logo.png" alt="CCTNS Caller" className="w-16 h-16 object-contain animate-pulse drop-shadow-md" />
+          <p className="text-xs font-bold text-[#17324F] dark:text-teal-400 tracking-wider uppercase">
+            CCTNS Caller • Uttar Pradesh
           </p>
         </div>
       </div>

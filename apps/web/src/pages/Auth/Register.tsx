@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Button, Input, Card } from '@police-directory/ui';
-import { Shield, ArrowLeft, CheckCircle2, AlertCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, AlertCircle } from 'lucide-react';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
@@ -147,9 +147,11 @@ export const Register: React.FC<RegisterProps> = ({ onNavigateToLogin, initialId
 
         <Card className="p-6 sm:p-8 shadow-xl rounded-3xl">
           <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-100 dark:border-slate-800">
-            <div className="w-10 h-10 rounded-xl bg-[#17324F] flex items-center justify-center text-[#C3A35E]">
-              <Shield className="w-6 h-6 fill-current" />
-            </div>
+            <img
+              src="/logo.png"
+              alt="CCTNS Caller Logo"
+              className="w-11 h-11 rounded-full object-contain shrink-0 shadow-sm border border-slate-200 dark:border-slate-700"
+            />
             <div>
               <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
                 {language === 'hi' ? 'कार्मिक स्व-पंजीकरण' : 'Personnel Self-Registration'}

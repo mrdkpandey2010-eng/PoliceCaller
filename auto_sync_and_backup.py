@@ -20,6 +20,7 @@ from datetime import datetime, timezone, timedelta
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
+# Configured Telegram Bot Credentials
 BOT_TOKEN = "8988345891:AAEl6FXgqQhil6oz4X3ABRiZbuyInwGLFw8"
 CHAT_ID = "25624148"
 
@@ -51,6 +52,7 @@ def export_host_database():
             print("      [ERROR] database_backup.sql not found.")
             return False
 
+    # Generate or refresh local SQLite database
     try:
         if os.path.isfile(SQLITE_PATH):
             os.remove(SQLITE_PATH)
@@ -71,6 +73,23 @@ def create_backup_zip():
 
     total_files = 0
     with zipfile.ZipFile(ZIP_PATH, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        # Include root helper files
+        root_files = [
+            '1-CLICK-SETUP-AND-START.bat',
+            'README_BACKUP_AND_SETUP.md',
+            'sync-and-backup-to-telegram.bat',
+            'auto_sync_and_backup.py',
+            'send-backup-to-telegram.bat',
+            'send_to_telegram.py',
+            'deploy-to-cloudflare.bat',
+            'push-to-github.bat'
+        ]
+        for rf in root_files:
+            rf_path = os.path.join(BASE_DIR, rf)
+            if os.path.isfile(rf_path):
+                zipf.write(rf_path, rf)
+                total_files += 1
+
         for root, dirs, files in os.walk(PROJECT_DIR):
             dirs[:] = [d for d in dirs if d not in exclude_dirs]
             for f in files:
@@ -91,7 +110,7 @@ def send_telegram_backup(update_subject, size_mb):
     time_str = get_indian_time()
 
     caption = (
-        f"🛡️ UP Police Portal - Full Project Backup\n"
+        f"🚔 CCTNS Caller - Final Project Backup\n"
         f"📅 दिनांक व समय: {time_str}\n"
         f"📌 अद्यतन विषय: {update_subject}\n"
         f"📦 फ़ाइल आकार: {size_mb:.2f} MB (डेटाबेस व 1-क्लिक रनर सहित)"
@@ -124,6 +143,7 @@ def main():
     print("  UP POLICE DIRECTORY - AUTOMATED HOST SYNC & TELEGRAM BACKUP")
     print("=" * 70)
 
+    # Determine update subject
     if len(sys.argv) > 1:
         subject = " ".join(sys.argv[1:])
     elif os.path.isfile(UPDATE_FILE):
@@ -132,11 +152,17 @@ def main():
     else:
         subject = "नया अद्यतन: थाना/कार्यालय नंबर एडिट, नया ऑफिस निर्माण, गाइड हटाया, डेटा सिंक"
 
+    # Save to LAST_UPDATE.txt
     with open(UPDATE_FILE, "w", encoding="utf-8") as f:
         f.write(subject)
 
+    # 1. Export host database
     export_host_database()
+
+    # 2. Create backup zip
     size_mb = create_backup_zip()
+
+    # 3. Send to Telegram
     success, caption = send_telegram_backup(subject, size_mb)
 
     print()

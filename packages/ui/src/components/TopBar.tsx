@@ -1,5 +1,5 @@
 import React from 'react';
-import { Shield, Bell, Moon, Sun, Globe, LogOut, MessageSquarePlus, Smartphone } from 'lucide-react';
+import { Bell, Moon, Sun, Globe, LogOut, MessageSquarePlus, Smartphone } from 'lucide-react';
 import { Button } from './Button';
 
 export interface TopBarProps {
@@ -34,7 +34,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   return (
     <header className="sticky top-0 z-30 w-full bg-[#17324F] text-white shadow-md border-b border-[#10243B]">
       <div className="flex items-center justify-between h-14 px-4 max-w-7xl mx-auto">
-        {/* Left: Shield Logo & Title (In-App Home Action - V4.8) */}
+        {/* Left: Official CCTNS Caller Logo & Title (In-App Home Action - V4.8) */}
         <div
           onClick={onHomeClick}
           role={onHomeClick ? 'button' : undefined}
@@ -45,12 +45,14 @@ export const TopBar: React.FC<TopBarProps> = ({
               onHomeClick();
             }
           }}
-          aria-label="Police Directory Home"
+          aria-label="CCTNS Caller Home"
           className={`flex items-center gap-2.5 ${onHomeClick ? 'cursor-pointer select-none active:opacity-80 transition' : ''}`}
         >
-          <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-[#C3A35E]">
-            <Shield className="w-5 h-5 fill-current" />
-          </div>
+          <img
+            src="/logo.png"
+            alt="CCTNS Caller Logo"
+            className="w-9 h-9 rounded-full object-contain shrink-0 shadow-sm border border-white/20"
+          />
           <div>
             <h1 className="text-sm font-bold tracking-tight text-white line-clamp-1">
               {title}

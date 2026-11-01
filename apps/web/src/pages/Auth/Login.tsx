@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Button, Input, Card } from '@police-directory/ui';
-import { Shield, Lock, ArrowLeft, ArrowRight, Eye, EyeOff, AlertCircle, Clock, UserX, Smartphone, Download } from 'lucide-react';
+import { Lock, ArrowLeft, ArrowRight, Eye, EyeOff, AlertCircle, Clock, UserX, Smartphone, Download } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { api } from '../../services/api';
@@ -101,18 +101,22 @@ export const Login: React.FC<LoginProps> = ({ onNavigateToRegister }) => {
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-b from-slate-100 to-slate-200 dark:from-[#09131F] dark:to-[#10243B]">
       <div className="w-full max-w-md">
-        {/* Department Badge Header */}
+        {/* Department Badge Header with Official CCTNS Caller Logo */}
         <div className="text-center mb-6">
-          <div className="w-16 h-16 mx-auto rounded-2xl bg-[#17324F] dark:bg-[#1E3E62] flex items-center justify-center text-[#C3A35E] shadow-lg mb-3">
-            <Shield className="w-9 h-9 fill-current" />
+          <div className="w-24 h-24 sm:w-28 sm:h-28 mx-auto mb-3 flex items-center justify-center">
+            <img
+              src="/logo.png"
+              alt="CCTNS Caller Logo"
+              className="w-full h-full object-contain drop-shadow-xl hover:scale-105 transition-transform duration-200"
+            />
           </div>
           <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 dark:text-white">
             {language === 'hi' ? 'उत्तर प्रदेश पुलिस' : 'Uttar Pradesh Police'}
           </h1>
           <p className="text-xs sm:text-sm font-semibold text-[#147D84] dark:text-teal-400 mt-0.5">
             {language === 'hi'
-              ? 'आधिकारिक कार्मिक निर्देशिका एवं संचार पोर्टल'
-              : 'Official Personnel Directory & Communication Portal'}
+              ? 'CCTNS Caller - आधिकारिक कार्मिक निर्देशिका एवं संचार पोर्टल'
+              : 'CCTNS Caller - Official Personnel Directory & Communication Portal'}
           </p>
         </div>
 
