@@ -54,7 +54,8 @@ export function createApp(dbInstance?: D1Database) {
         if (!origin) return '*';
         if (
           allowedOrigins.includes(origin) ||
-          origin.endsWith('.police-directory-app.pages.dev')
+          origin.endsWith('.police-directory-app.pages.dev') ||
+          origin.endsWith('.vercel.app')
         ) {
           return origin;
         }
