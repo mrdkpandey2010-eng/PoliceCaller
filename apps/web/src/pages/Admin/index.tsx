@@ -22,6 +22,9 @@ import {
   Building2,
   MessageSquarePlus,
   Star,
+  Phone,
+  Plus,
+  MapPin,
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -47,6 +50,22 @@ export const AdminDashboard: React.FC = () => {
   // Real-time Feedbacks state (Requirement 1)
   const [feedbacks, setFeedbacks] = useState<any[]>([]);
   const [feedbackLoading, setFeedbackLoading] = useState(false);
+
+  // Stations & Offices Command Tab state (Co-Admin & Super Admin)
+  const [adminStations, setAdminStations] = useState<any[]>([]);
+  const [stationsLoading, setStationsLoading] = useState(false);
+  const [stationSearch, setStationSearch] = useState('');
+  const [editingStation, setEditingStation] = useState<any | null>(null);
+  const [newStationPhone, setNewStationPhone] = useState('');
+  const [savingStationPhone, setSavingStationPhone] = useState(false);
+  const [addOfficeModalOpen, setAddOfficeModalOpen] = useState(false);
+  const [newOfficeName, setNewOfficeName] = useState('');
+  const [newOfficeType, setNewOfficeType] = useState('CIRCLE_OFFICE');
+  const [newOfficePhone, setNewOfficePhone] = useState('');
+  const [newOfficeAddress, setNewOfficeAddress] = useState('');
+  const [newOfficeDistrictId, setNewOfficeDistrictId] = useState('');
+  const [addingOffice, setAddingOffice] = useState(false);
+  const [allDistricts, setAllDistricts] = useState<any[]>([]);
 
   // Super Admin Control: Co-Admin Excel Bulk Import toggle (Requirement 5)
   const [coAdminExcelEnabled, setCoAdminExcelEnabled] = useState<boolean>(true);
@@ -154,9 +173,80 @@ export const AdminDashboard: React.FC = () => {
         } finally {
           setFeedbackLoading(false);
         }
+      } else if (tab === 'stations') {
+        setStationsLoading(true);
+        try {
+          const [stnRes, distRes] = await Promise.all([
+            api.getStations({
+              districtId: isSuperAdmin ? undefined : user?.districtId,
+              all: true,
+            }),
+            allDistricts.length === 0 ? api.getDistricts() : Promise.resolve({ districts: allDistricts }),
+          ]);
+          setAdminStations(stnRes.stations || []);
+          if (distRes?.districts) {
+            setAllDistricts(distRes.districts);
+          }
+        } finally {
+          setStationsLoading(false);
+        }
       }
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleSaveStationPhone = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStation) return;
+    if (!/^[0-9\-+\s]{6,15}$/.test(newStationPhone.trim())) {
+      alert('Please enter a valid phone number (6-15 digits/standard format).');
+      return;
+    }
+    setSavingStationPhone(true);
+    try {
+      await api.updateStationPhone(editingStation.id, newStationPhone.trim());
+      setAdminStations((prev) =>
+        prev.map((s) => (s.id === editingStation.id ? { ...s, phone: newStationPhone.trim() } : s))
+      );
+      setEditingStation(null);
+    } catch (err: any) {
+      alert(err.message || 'Failed to update phone number');
+    } finally {
+      setSavingStationPhone(false);
+    }
+  };
+
+  const handleCreateOffice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newOfficeName.trim()) {
+      alert('Office Name is required.');
+      return;
+    }
+    const targetDist = isSuperAdmin ? newOfficeDistrictId || user?.districtId : user?.districtId;
+    if (!targetDist) {
+      alert('District is required.');
+      return;
+    }
+    setAddingOffice(true);
+    try {
+      await api.createStation({
+        districtId: targetDist,
+        name: newOfficeName.trim(),
+        type: newOfficeType,
+        phone: newOfficePhone.trim() || undefined,
+        address: newOfficeAddress.trim() || undefined,
+      });
+      alert('New Departmental Office created successfully.');
+      setAddOfficeModalOpen(false);
+      setNewOfficeName('');
+      setNewOfficePhone('');
+      setNewOfficeAddress('');
+      loadTabContent('stations');
+    } catch (err: any) {
+      alert(err.message || 'Failed to create office');
+    } finally {
+      setAddingOffice(false);
     }
   };
 
@@ -382,6 +472,17 @@ export const AdminDashboard: React.FC = () => {
     );
   });
 
+  const filteredStations = adminStations.filter((stn) => {
+    if (!stationSearch.trim()) return true;
+    const q = stationSearch.toLowerCase();
+    return (
+      stn.name?.toLowerCase().includes(q) ||
+      stn.type?.toLowerCase().includes(q) ||
+      stn.phone?.toLowerCase().includes(q) ||
+      stn.districtName?.toLowerCase().includes(q)
+    );
+  });
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-4 pb-24 md:pb-8 space-y-6">
       {/* Top Banner */}
@@ -437,6 +538,17 @@ export const AdminDashboard: React.FC = () => {
           }`}
         >
           Personnel Records
+        </button>
+        <button
+          onClick={() => loadTabContent('stations')}
+          className={`px-3 py-2 rounded-xl font-bold transition-colors shrink-0 flex items-center gap-1.5 ${
+            activeTab === 'stations'
+              ? 'bg-[#17324F] text-white'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <Building2 className="w-3.5 h-3.5 text-[#147D84]" />
+          Stations & Offices
         </button>
         <button
           onClick={() => loadTabContent('transfers')}
@@ -990,6 +1102,142 @@ export const AdminDashboard: React.FC = () => {
                         </Button>
                       </div>
                     )}
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tab: Stations & Departmental Offices Command */}
+      {activeTab === 'stations' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <div className="flex items-center gap-2">
+                <Building2 className="w-5 h-5 text-[#147D84]" />
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                  District Stations & Offices Command (थाना एवं कार्यालय प्रबंधन)
+                </h3>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {isSuperAdmin
+                  ? 'Statewide Directory: Manage official contact numbers and departmental offices across all districts.'
+                  : `District Administration: Manage contact numbers for Thanas and departmental offices in ${user?.districtName || 'your district'}, or establish new departmental offices.`}
+              </p>
+            </div>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => {
+                setNewOfficeName('');
+                setNewOfficePhone('');
+                setNewOfficeAddress('');
+                setNewOfficeType('CIRCLE_OFFICE');
+                setNewOfficeDistrictId(user?.districtId || '');
+                setAddOfficeModalOpen(true);
+              }}
+              aria-label="Add new office"
+              className="bg-[#17324F] text-xs font-bold shadow-sm flex items-center gap-1.5"
+            >
+              <Plus className="w-4 h-4" />
+              Add New Office (नया कार्यालय जोड़ें)
+            </Button>
+          </div>
+
+          {/* Search bar & count */}
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="relative flex-1 min-w-[220px] max-w-md">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Search Thana, Office, Type or Phone..."
+                value={stationSearch}
+                onChange={(e) => setStationSearch(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#147D84]"
+              />
+            </div>
+            <div className="text-xs text-slate-600 dark:text-slate-400 font-medium">
+              Showing <strong className="text-slate-900 dark:text-white font-mono">{filteredStations.length}</strong> of{' '}
+              <strong className="text-slate-900 dark:text-white font-mono">{adminStations.length}</strong> units
+            </div>
+          </div>
+
+          {stationsLoading ? (
+            <Card className="p-8 text-center text-slate-400 text-xs">
+              Loading stations and offices data...
+            </Card>
+          ) : filteredStations.length === 0 ? (
+            <Card className="p-8 text-center text-slate-400 text-xs">
+              No police stations or departmental offices found.
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {filteredStations.map((stn) => (
+                <Card
+                  key={stn.id}
+                  className="p-4 flex flex-col justify-between border border-slate-200 dark:border-slate-800 hover:shadow-sm transition-shadow rounded-2xl bg-white dark:bg-slate-900"
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <h4 className="text-xs font-bold text-slate-900 dark:text-white">
+                          {stn.name}
+                        </h4>
+                        {stn.districtName && (
+                          <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
+                            <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                            {stn.districtName}
+                          </p>
+                        )}
+                      </div>
+                      <Badge
+                        variant={stn.type === 'POLICE_STATION' ? 'khaki' : 'teal'}
+                        className="text-[10px] uppercase font-mono px-2 py-0.5"
+                      >
+                        {stn.type === 'POLICE_STATION'
+                          ? 'थाना'
+                          : stn.type === 'CIRCLE_OFFICE'
+                          ? 'CO Office'
+                          : stn.type === 'SP_OFFICE'
+                          ? 'SP Office'
+                          : stn.type === 'LINE'
+                          ? 'Police Lines'
+                          : stn.type === 'TRAFFIC'
+                          ? 'Traffic'
+                          : 'Office'}
+                      </Badge>
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-1.5">
+                        <Phone className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                        {stn.phone ? (
+                          <a
+                            href={`tel:${stn.phone}`}
+                            className="font-mono font-bold text-slate-800 dark:text-slate-200 hover:text-teal-600"
+                          >
+                            {stn.phone}
+                          </a>
+                        ) : (
+                          <span className="text-slate-400 italic text-[11px]">No phone registered</span>
+                        )}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setEditingStation(stn);
+                          setNewStationPhone(stn.phone || '');
+                        }}
+                        aria-label={`Edit number for ${stn.name}`}
+                        className="text-[11px] px-2.5 py-1 text-teal-700 dark:text-teal-300 border-teal-200 dark:border-teal-800 flex items-center gap-1 hover:bg-teal-50 dark:hover:bg-teal-950/40"
+                      >
+                        <Edit2 className="w-3 h-3" />
+                        Edit Number
+                      </Button>
+                    </div>
                   </div>
                 </Card>
               ))}
@@ -1699,6 +1947,175 @@ export const AdminDashboard: React.FC = () => {
             <li>Managing district personnel directory rosters</li>
           </ul>
         </div>
+      </Modal>
+
+      {/* Edit Station / Office Contact Phone Modal */}
+      <Modal
+        isOpen={Boolean(editingStation)}
+        onClose={() => {
+          if (!savingStationPhone) setEditingStation(null);
+        }}
+        title="Edit Contact Number (थाना / कार्यालय संपर्क नंबर बदलें)"
+        maxWidth="sm"
+        footer={
+          <div className="flex items-center justify-end gap-2 w-full">
+            <Button
+              variant="ghost"
+              onClick={() => setEditingStation(null)}
+              disabled={savingStationPhone}
+              aria-label="Cancel editing"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleSaveStationPhone}
+              disabled={savingStationPhone}
+              aria-label="Save phone number"
+              className="bg-[#17324F] font-bold"
+            >
+              {savingStationPhone ? 'Saving...' : 'Save Number'}
+            </Button>
+          </div>
+        }
+      >
+        <form onSubmit={handleSaveStationPhone} className="space-y-4">
+          <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 text-xs space-y-1">
+            <div className="font-bold text-slate-900 dark:text-white text-sm">
+              {editingStation?.name}
+            </div>
+            <div className="text-slate-500">
+              Type:{' '}
+              <span className="font-semibold text-slate-700 dark:text-slate-300">
+                {editingStation?.type}
+              </span>{' '}
+              • District:{' '}
+              <span className="font-semibold text-[#147D84]">
+                {editingStation?.districtName || user?.districtName}
+              </span>
+            </div>
+          </div>
+
+          <div>
+            <Input
+              label="Official Contact Number (CUG / Landline / Mobile)"
+              type="text"
+              value={newStationPhone}
+              onChange={(e) => setNewStationPhone(e.target.value)}
+              placeholder="e.g. 05222200000 or 9454400000"
+              required
+            />
+            <p className="text-[11px] text-slate-400 mt-1">
+              Enter 6-15 digit official number or STD code. This number will be displayed on the directory for all police personnel.
+            </p>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Add New Departmental Office Modal */}
+      <Modal
+        isOpen={addOfficeModalOpen}
+        onClose={() => {
+          if (!addingOffice) setAddOfficeModalOpen(false);
+        }}
+        title="Add New Departmental Office (नया कार्यालय जोड़ें)"
+        maxWidth="md"
+        footer={
+          <div className="flex items-center justify-end gap-2 w-full">
+            <Button
+              variant="ghost"
+              onClick={() => setAddOfficeModalOpen(false)}
+              disabled={addingOffice}
+              aria-label="Cancel adding office"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleCreateOffice}
+              disabled={addingOffice}
+              aria-label="Create Office"
+              className="bg-[#17324F] font-bold"
+            >
+              {addingOffice ? 'Creating...' : 'Create Office'}
+            </Button>
+          </div>
+        }
+      >
+        <form onSubmit={handleCreateOffice} className="space-y-4">
+          <div className="p-3 bg-teal-50 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800 rounded-xl text-xs text-teal-900 dark:text-teal-200">
+            <strong>Co-Admin / Super Admin Authority:</strong> Establish new departmental branches, circle offices, police lines sections, or specialized units in your jurisdiction. Police Station (थाना) establishment is regulated at the State Headquarters level.
+          </div>
+
+          {isSuperAdmin && (
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Command District *
+              </label>
+              <select
+                value={newOfficeDistrictId}
+                onChange={(e) => setNewOfficeDistrictId(e.target.value)}
+                required
+                className="w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#17324F]"
+              >
+                <option value="">Select District...</option>
+                {allDistricts.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name} ({d.stateCode})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div>
+            <Input
+              label="Office Name (कार्यालय का नाम) *"
+              type="text"
+              value={newOfficeName}
+              onChange={(e) => setNewOfficeName(e.target.value)}
+              placeholder="e.g. Circle Office Sadar, Cyber Cell, Traffic Branch"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              Classification / Office Type *
+            </label>
+            <select
+              value={newOfficeType}
+              onChange={(e) => setNewOfficeType(e.target.value)}
+              className="w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#17324F]"
+            >
+              <option value="CIRCLE_OFFICE">Circle Office / CO (सर्किल / वृत्ताधिकारी कार्यालय)</option>
+              <option value="SP_OFFICE">SP Office / Branch (पुलिस अधीक्षक कार्यालय / शाखा)</option>
+              <option value="LINE">Police Lines / Reserve (रिजर्व पुलिस लाइन्स / गणना)</option>
+              <option value="TRAFFIC">Traffic Police Branch (यातायात पुलिस इकाई)</option>
+              <option value="OTHER">Other Departmental Unit / Special Cell (अन्य / विशेष शाखा)</option>
+            </select>
+          </div>
+
+          <div>
+            <Input
+              label="Official Contact Number (Optional)"
+              type="text"
+              value={newOfficePhone}
+              onChange={(e) => setNewOfficePhone(e.target.value)}
+              placeholder="e.g. 05222200000 or 9454400000"
+            />
+          </div>
+
+          <div>
+            <Input
+              label="Location / Office Address (Optional)"
+              type="text"
+              value={newOfficeAddress}
+              onChange={(e) => setNewOfficeAddress(e.target.value)}
+              placeholder="e.g. Collectorate Compound / Police Lines Road"
+            />
+          </div>
+        </form>
       </Modal>
     </div>
   );

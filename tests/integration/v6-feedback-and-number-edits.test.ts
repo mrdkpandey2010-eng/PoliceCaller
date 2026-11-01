@@ -346,5 +346,69 @@ describe('V6 Real-Time Feedback, Compulsory Notices & Scoped Number Edits Test S
       const data = await res.json();
       expect(data.error).toContain('strictly authorized to edit station/office phone numbers only');
     });
+
+    it('allows Co-Admin to add a new departmental office in their assigned district', async () => {
+      const res = await app.request('/api/masters/stations', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${coAdminLkoToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          districtId: 'dist_lucknow',
+          name: 'Circle Office Mahanagar',
+          type: 'CIRCLE_OFFICE',
+          phone: '0522-2334455',
+          address: 'Mahanagar Sector B',
+        }),
+      });
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.success).toBe(true);
+      expect(data.stationId).toBeDefined();
+
+      const created = await db.prepare('SELECT name, type, phone FROM stations_offices WHERE id = ?').bind(data.stationId).first<any>();
+      expect(created.name).toBe('Circle Office Mahanagar');
+      expect(created.type).toBe('CIRCLE_OFFICE');
+      expect(created.phone).toBe('0522-2334455');
+    });
+
+    it('strictly forbids Co-Admin from creating a POLICE_STATION (State HQ Level Only)', async () => {
+      const res = await app.request('/api/masters/stations', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${coAdminLkoToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          districtId: 'dist_lucknow',
+          name: 'Thana New Colony',
+          type: 'POLICE_STATION',
+          phone: '0522-2998877',
+        }),
+      });
+      expect(res.status).toBe(403);
+      const data = await res.json();
+      expect(data.error).toContain('Police Stations are established at State Headquarters level');
+    });
+
+    it('strictly forbids Co-Admin from creating an office in another district', async () => {
+      const res = await app.request('/api/masters/stations', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${coAdminLkoToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          districtId: 'dist_kanpur_nagar',
+          name: 'Circle Office Kanpur Unauthorized',
+          type: 'CIRCLE_OFFICE',
+          phone: '0512-2998877',
+        }),
+      });
+      expect(res.status).toBe(403);
+      const data = await res.json();
+      expect(data.error).toContain('may only add offices within your assigned district');
+    });
   });
 });

@@ -272,15 +272,25 @@ export function createMastersRouter(db: D1Database) {
     return c.json({ stations: results });
   });
 
-  // POST /api/masters/stations (Super Admin only)
+  // POST /api/masters/stations (Super Admin full authority, District Co-Admin can add new offices in their district)
   router.post('/stations', async (c) => {
     const user = c.get('user');
-    if (!user || user.role !== ROLES.SUPER_ADMIN) {
-      return c.json({ error: 'Super Admin only' }, 403);
+    if (!user || (user.role !== ROLES.SUPER_ADMIN && user.role !== ROLES.DISTRICT_CO_ADMIN)) {
+      return c.json({ error: 'Administrative authority required' }, 403);
     }
     try {
       const body = await c.req.json();
       const validated = CreateStationOfficeSchema.parse(body);
+
+      // District Co-Admin authority check
+      if (user.role === ROLES.DISTRICT_CO_ADMIN) {
+        if (validated.districtId !== user.districtId) {
+          return c.json({ error: 'Forbidden: You may only add offices within your assigned district.' }, 403);
+        }
+        if (validated.type === 'POLICE_STATION') {
+          return c.json({ error: 'Police Stations are established at State Headquarters level. District Co-Admins are authorized to create Departmental Offices and specialized units.' }, 403);
+        }
+      }
 
       const nameCheck = validateEnglishMasterName(validated.name);
       if (!nameCheck.valid) {
