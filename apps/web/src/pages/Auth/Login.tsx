@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { Button, Input, Card } from '@police-directory/ui';
-import { Shield, Lock, ArrowLeft, ArrowRight, Eye, EyeOff, AlertCircle, Clock, UserX } from 'lucide-react';
+import { Shield, Lock, ArrowLeft, ArrowRight, Eye, EyeOff, AlertCircle, Clock, UserX, Smartphone, Download } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { api } from '../../services/api';
+import { InstallAppBanner, InstallInstructionsModal } from '../../components/InstallAppPrompt';
 
 export interface LoginProps {
   onNavigateToRegister?: (initialIdentifier?: string) => void;
@@ -12,6 +13,7 @@ export interface LoginProps {
 export const Login: React.FC<LoginProps> = ({ onNavigateToRegister }) => {
   const { login } = useAuth();
   const { language } = useLanguage();
+  const [installModalOpen, setInstallModalOpen] = useState(false);
 
   // Stage: 'identifier' | 'password'
   const [stage, setStage] = useState<'identifier' | 'password'>('identifier');
@@ -254,6 +256,38 @@ export const Login: React.FC<LoginProps> = ({ onNavigateToRegister }) => {
             </form>
           )}
         </Card>
+
+        {/* Quick Mobile App Install Card */}
+        <div className="mt-4 p-3 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xs border border-[#C3A35E]/40 rounded-2xl shadow-sm flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-[#17324F] flex items-center justify-center text-[#C3A35E] shrink-0">
+              <Smartphone className="w-4 h-4 text-[#E6CD91]" />
+            </div>
+            <div className="text-left">
+              <p className="text-xs font-bold text-slate-900 dark:text-white">
+                {language === 'hi' ? 'ऑफिशियल ऐप इंस्टॉल करें' : 'Install Official App'}
+              </p>
+              <p className="text-[11px] text-slate-500">
+                {language === 'hi' ? '1-क्लिक एक्सेस • स्वतः लाइव अपडेट' : '1-click access • Live updates'}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setInstallModalOpen(true)}
+            aria-label="Install app"
+            className="px-3 py-1.5 bg-[#17324F] hover:bg-[#10243B] text-[#C3A35E] font-bold text-xs rounded-xl flex items-center gap-1 shadow-xs border border-[#C3A35E]/30"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>{language === 'hi' ? 'इंस्टॉल' : 'Install'}</span>
+          </button>
+        </div>
+
+        <InstallAppBanner onOpenModal={() => setInstallModalOpen(true)} />
+        <InstallInstructionsModal
+          isOpen={installModalOpen}
+          onClose={() => setInstallModalOpen(false)}
+        />
       </div>
     </div>
   );

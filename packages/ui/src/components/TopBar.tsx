@@ -1,5 +1,5 @@
 import React from 'react';
-import { Shield, Bell, Moon, Sun, Globe, LogOut, MessageSquarePlus } from 'lucide-react';
+import { Shield, Bell, Moon, Sun, Globe, LogOut, MessageSquarePlus, Smartphone } from 'lucide-react';
 import { Button } from './Button';
 
 export interface TopBarProps {
@@ -8,6 +8,7 @@ export interface TopBarProps {
   onNotificationsClick?: () => void;
   onFeedbackClick?: () => void;
   onHomeClick?: () => void;
+  onInstallClick?: () => void;
   isDarkMode?: boolean;
   onToggleTheme?: () => void;
   language?: 'en' | 'hi';
@@ -22,6 +23,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   onNotificationsClick,
   onFeedbackClick,
   onHomeClick,
+  onInstallClick,
   isDarkMode = false,
   onToggleTheme,
   language = 'en',
@@ -59,8 +61,23 @@ export const TopBar: React.FC<TopBarProps> = ({
           </div>
         </div>
 
-        {/* Right: Actions (Language toggle, Dark mode, Notification Bell, User Avatar) */}
+        {/* Right: Actions (Install App, Language toggle, Dark mode, Notification Bell, User Avatar) */}
         <div className="flex items-center gap-1 sm:gap-2">
+          {onInstallClick && (
+            <button
+              onClick={onInstallClick}
+              type="button"
+              aria-label="Install Official App"
+              title="Install Official App (ऐप इंस्टॉल करें)"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#C3A35E]/20 hover:bg-[#C3A35E]/30 text-[#E6CD91] border border-[#C3A35E]/40 rounded-xl text-xs font-bold transition shadow-xs"
+            >
+              <Smartphone className="w-3.5 h-3.5 text-[#E6CD91] animate-pulse" />
+              <span className="text-[11px] font-bold">
+                {language === 'hi' ? 'ऐप इंस्टॉल करें' : 'Install App'}
+              </span>
+            </button>
+          )}
+
           {onToggleLanguage && (
             <Button
               variant="ghost"

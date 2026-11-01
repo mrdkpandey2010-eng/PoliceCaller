@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Avatar, Button, Input, Modal, Badge } from '@police-directory/ui';
-import { LogOut, ArrowRightLeft, Check, MessageSquarePlus } from 'lucide-react';
+import { LogOut, ArrowRightLeft, Check, MessageSquarePlus, Smartphone, Download } from 'lucide-react';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { FeedbackModal } from '../../components/FeedbackModal';
+import { InstallInstructionsModal } from '../../components/InstallAppPrompt';
 
 export const Profile: React.FC = () => {
   const { user, logout } = useAuth();
@@ -13,6 +14,7 @@ export const Profile: React.FC = () => {
   const [districts, setDistricts] = useState<any[]>([]);
   const [stations, setStations] = useState<any[]>([]);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [showInstallModal, setShowInstallModal] = useState(false);
 
   // Transfer modal
   const [showTransferModal, setShowTransferModal] = useState(false);
@@ -120,6 +122,19 @@ export const Profile: React.FC = () => {
 
 
 
+
+      {/* Install Official App Button */}
+      <div className="pt-2">
+        <Button
+          variant="outline"
+          onClick={() => setShowInstallModal(true)}
+          aria-label="Install official mobile app"
+          icon={<Smartphone className="w-4 h-4 text-[#C3A35E]" />}
+          className="w-full font-bold py-2.5 rounded-2xl shadow-xs border-[#C3A35E]/40 text-slate-800 dark:text-slate-200 hover:bg-[#C3A35E]/10"
+        >
+          {language === 'hi' ? '📱 मोबाइल पर ऐप इंस्टॉल करें (PWA / Live App)' : '📱 Install Official App on Mobile'}
+        </Button>
+      </div>
 
       {/* Real-Time Feedback Button (Requirement 1) */}
       <div className="pt-2">
@@ -248,6 +263,12 @@ export const Profile: React.FC = () => {
           </div>
         </div>
       </Modal>
+
+      {/* Install Instructions Modal */}
+      <InstallInstructionsModal
+        isOpen={showInstallModal}
+        onClose={() => setShowInstallModal(false)}
+      />
     </div>
   );
 };
