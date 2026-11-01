@@ -12,6 +12,15 @@
 @layer base {
   body {
     -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* Allow text selection only within input fields and textareas */
+  input, textarea {
+    -webkit-user-select: text;
+    user-select: text;
   }
 }
 

@@ -66,6 +66,15 @@ export function createApp(dbInstance?: D1Database) {
     })
   );
 
+  // Strict Anti-Sniffing & Anti-Caching Headers for all API responses
+  app.use('*', async (c, next) => {
+    await next();
+    c.header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+    c.header('Pragma', 'no-cache');
+    c.header('Expires', '0');
+    c.header('X-Content-Type-Options', 'nosniff');
+  });
+
   // Database resolution
   app.use('*', async (c, next) => {
     const db = dbInstance || (c.env && c.env.DB ? c.env.DB : fallbackDb);
