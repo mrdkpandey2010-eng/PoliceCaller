@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Avatar, Button, Input, Modal, Badge } from '@police-directory/ui';
-import { LogOut, ArrowRightLeft, Check } from 'lucide-react';
+import { LogOut, ArrowRightLeft, Check, MessageSquarePlus } from 'lucide-react';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
+import { FeedbackModal } from '../../components/FeedbackModal';
 
 export const Profile: React.FC = () => {
   const { user, logout } = useAuth();
@@ -11,6 +12,7 @@ export const Profile: React.FC = () => {
 
   const [districts, setDistricts] = useState<any[]>([]);
   const [stations, setStations] = useState<any[]>([]);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
 
   // Transfer modal
   const [showTransferModal, setShowTransferModal] = useState(false);
@@ -119,6 +121,19 @@ export const Profile: React.FC = () => {
 
 
 
+      {/* Real-Time Feedback Button (Requirement 1) */}
+      <div className="pt-2">
+        <Button
+          variant="outline"
+          onClick={() => setShowFeedbackModal(true)}
+          aria-label="Submit Real-Time Feedback or Suggestion"
+          icon={<MessageSquarePlus className="w-4 h-4 text-[#147D84]" />}
+          className="w-full font-bold py-2.5 rounded-2xl shadow-xs border-[#147D84]/30 text-[#147D84] dark:text-teal-400"
+        >
+          {language === 'hi' ? '💡 रीयल-टाइम प्रतिपुष्टि व सुझाव दें' : '💡 Submit Real-Time Feedback'}
+        </Button>
+      </div>
+
       {/* Logout */}
       <div className="pt-2">
         <Button
@@ -131,6 +146,12 @@ export const Profile: React.FC = () => {
           {language === 'hi' ? 'सुरक्षित लॉग आउट' : 'Secure Logout'}
         </Button>
       </div>
+
+      {/* Feedback Modal */}
+      <FeedbackModal
+        isOpen={showFeedbackModal}
+        onClose={() => setShowFeedbackModal(false)}
+      />
 
       {/* Request Transfer Modal */}
       <Modal

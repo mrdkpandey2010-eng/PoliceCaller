@@ -332,11 +332,11 @@ export function createMastersRouter(db: D1Database) {
     }
   });
 
-  // PUT /api/masters/stations/:id (Super Admin only)
+  // PUT /api/masters/stations/:id (Super Admin full edit, District Co-Admin phone-only edit)
   router.put('/stations/:id', async (c) => {
     const user = c.get('user');
-    if (!user || user.role !== ROLES.SUPER_ADMIN) {
-      return c.json({ error: 'Super Admin only' }, 403);
+    if (!user || (user.role !== ROLES.SUPER_ADMIN && user.role !== ROLES.DISTRICT_CO_ADMIN)) {
+      return c.json({ error: 'Administrative authority required' }, 403);
     }
     const stationId = c.req.param('id');
     try {
@@ -346,7 +346,20 @@ export function createMastersRouter(db: D1Database) {
       const target = await db.prepare('SELECT * FROM stations_offices WHERE id = ?').bind(stationId).first<any>();
       if (!target) return c.json({ error: 'Station/Office not found' }, 404);
 
-      if (name) {
+      if (user.role === ROLES.DISTRICT_CO_ADMIN) {
+        if (target.district_id !== user.districtId) {
+          return c.json({ error: 'Forbidden: You may only edit stations/offices in your assigned district.' }, 403);
+        }
+        if (
+          (name !== undefined && name !== target.name) ||
+          (type !== undefined && type !== target.type) ||
+          (address !== undefined && address !== target.address)
+        ) {
+          return c.json({ error: 'District Co-Admins are strictly authorized to edit station/office phone numbers only.' }, 403);
+        }
+      }
+
+      if (name && user.role === ROLES.SUPER_ADMIN) {
         const nameCheck = validateEnglishMasterName(name);
         if (!nameCheck.valid) return c.json({ error: nameCheck.error }, 422);
       }
@@ -362,7 +375,14 @@ export function createMastersRouter(db: D1Database) {
                updated_at = ?
            WHERE id = ?`
         )
-        .bind(name?.trim() || null, type || null, address?.trim() || null, phone?.trim() || null, now, stationId)
+        .bind(
+          user.role === ROLES.SUPER_ADMIN ? (name?.trim() || null) : null,
+          user.role === ROLES.SUPER_ADMIN ? (type || null) : null,
+          user.role === ROLES.SUPER_ADMIN ? (address?.trim() || null) : null,
+          phone?.trim() || null,
+          now,
+          stationId
+        )
         .run();
 
       return c.json({ success: true, message: 'Station/Office updated successfully.' });

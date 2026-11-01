@@ -1,22 +1,56 @@
 import React, { useState, useEffect } from 'react';
-import { SearchBar, Button, Badge } from '@police-directory/ui';
-import { Building, Phone, MapPin, Filter, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { SearchBar, Button, Badge, Modal, Input } from '@police-directory/ui';
+import { Building, Phone, MapPin, Filter, X, ChevronLeft, ChevronRight, Edit2 } from 'lucide-react';
 import { api } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
+import { ROLES } from '@police-directory/shared';
 
 export interface DirectoryStationsOfficesProps {
   districts: any[];
 }
 
 export const DirectoryStationsOffices: React.FC<DirectoryStationsOfficesProps> = ({ districts }) => {
+  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDistrict, setSelectedDistrict] = useState('');
   const [selectedType, setSelectedType] = useState<'POLICE_STATION' | 'OFFICE' | ''>('');
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Station Phone Editing (Co-Admin district scope & Super Admin)
+  const [editingStation, setEditingStation] = useState<any | null>(null);
+  const [newStationPhone, setNewStationPhone] = useState<string>('');
+  const [savingPhone, setSavingPhone] = useState<boolean>(false);
+
   // Pagination State (Max 100 per page, max 3 pages)
   const [page, setPage] = useState<number>(1);
   const pageSize = 100;
+
+  const handleOpenEditPhone = (stn: any) => {
+    setEditingStation(stn);
+    setNewStationPhone(stn.phone || '');
+  };
+
+  const handleSavePhone = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStation) return;
+    if (!/^[0-9\-+\s]{6,15}$/.test(newStationPhone.trim())) {
+      alert('Please enter a valid phone number (6-15 digits/standard phone format).');
+      return;
+    }
+    setSavingPhone(true);
+    try {
+      await api.updateStationPhone(editingStation.id, newStationPhone.trim());
+      setItems((prev) =>
+        prev.map((s) => (s.id === editingStation.id ? { ...s, phone: newStationPhone.trim() } : s))
+      );
+      setEditingStation(null);
+    } catch (err: any) {
+      alert(err.message || 'Failed to update phone number');
+    } finally {
+      setSavingPhone(false);
+    }
+  };
 
   const fetchItems = async () => {
     setLoading(true);
@@ -167,6 +201,21 @@ export const DirectoryStationsOffices: React.FC<DirectoryStationsOfficesProps> =
                           Not available
                         </span>
                       )}
+
+                      {/* Co-Admin & Super Admin Phone Edit Action (Requirement 3) */}
+                      {(user?.role === ROLES.SUPER_ADMIN ||
+                        (user?.role === ROLES.DISTRICT_CO_ADMIN && user?.districtId === item.districtId)) && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleOpenEditPhone(item)}
+                          aria-label={`Edit contact number for ${item.name}`}
+                          className="text-xs px-2.5 py-1 text-[#147D84] border-[#147D84]/40 hover:bg-[#147D84]/10 font-bold"
+                        >
+                          <Edit2 className="w-3 h-3 mr-1 inline" />
+                          Edit Number
+                        </Button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -229,6 +278,54 @@ export const DirectoryStationsOffices: React.FC<DirectoryStationsOfficesProps> =
           })()
         )}
       </div>
+
+      {/* Edit Station Phone Modal (Requirement 3) */}
+      <Modal
+        isOpen={Boolean(editingStation)}
+        onClose={() => setEditingStation(null)}
+        title={`Edit Contact Number: ${editingStation?.name}`}
+      >
+        <form onSubmit={handleSavePhone} className="space-y-4">
+          <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 text-xs">
+            <span className="text-slate-400 font-mono text-[10px] block uppercase">UNIT & DISTRICT</span>
+            <p className="font-bold text-slate-900 dark:text-white">
+              {editingStation?.name} ({editingStation?.type === 'POLICE_STATION' ? 'Police Station' : 'Office'})
+            </p>
+            <p className="text-slate-500 mt-0.5">District: {editingStation?.districtName}</p>
+          </div>
+
+          <Input
+            label="Official Contact Number (Phone / Mobile) *"
+            value={newStationPhone}
+            onChange={(e) => setNewStationPhone(e.target.value)}
+            placeholder="e.g. 0522-2200000 or 9454400000"
+            required
+          />
+
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setEditingStation(null)}
+              disabled={savingPhone}
+              aria-label="Cancel editing"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+              disabled={savingPhone || !newStationPhone.trim()}
+              aria-label="Save contact number"
+              className="bg-[#17324F] font-bold"
+            >
+              {savingPhone ? 'Saving...' : 'Save Number'}
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 };

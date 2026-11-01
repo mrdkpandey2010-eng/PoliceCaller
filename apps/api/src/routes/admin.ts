@@ -266,7 +266,7 @@ export function createAdminRouter(db: D1Database) {
     const { fullName, mobile, designationId, whatsapp, email } = body;
 
     const target = await db
-      .prepare('SELECT id, pno, full_name, mobile, role, district_id, status FROM users WHERE id = ?')
+      .prepare('SELECT id, pno, full_name, mobile, role, district_id, designation_id, email, status FROM users WHERE id = ?')
       .bind(targetUserId)
       .first<any>();
 
@@ -274,6 +274,17 @@ export function createAdminRouter(db: D1Database) {
 
     if (!RBAC.canEditUser(user, target.id, target.district_id)) {
       return c.json({ error: 'Forbidden: You cannot modify users outside your assigned district.' }, 403);
+    }
+
+    // Co-Admin contact number edit restriction: Co-Admins are strictly authorized to edit contact numbers only
+    if (user.role === ROLES.DISTRICT_CO_ADMIN) {
+      if (
+        (fullName !== undefined && fullName !== target.full_name) ||
+        (designationId !== undefined && designationId !== target.designation_id) ||
+        (email !== undefined && email !== target.email)
+      ) {
+        return c.json({ error: 'District Co-Admins are strictly authorized to edit contact numbers only.' }, 403);
+      }
     }
 
     if (fullName) {
@@ -326,6 +337,55 @@ export function createAdminRouter(db: D1Database) {
 
   router.put('/users/:userId/details', handleUpdateUserDetails);
   router.patch('/users/:userId/details', handleUpdateUserDetails);
+
+  // PATCH /api/admin/stations/:stationId/phone - Co-Admin (district-scoped) and Super Admin edit station/office phone number
+  router.patch('/stations/:stationId/phone', async (c) => {
+    const user = c.get('user')!;
+    const stationId = c.req.param('stationId');
+    const body = await c.req.json();
+    const { phone } = body;
+
+    if (!phone || typeof phone !== 'string' || !/^[0-9\-+\s]{6,15}$/.test(phone.trim())) {
+      return c.json({ error: 'Valid phone number is required (6-15 digits/standard phone format).' }, 422);
+    }
+
+    const target = await db
+      .prepare('SELECT id, district_id, name, type, phone FROM stations_offices WHERE id = ?')
+      .bind(stationId)
+      .first<any>();
+
+    if (!target) {
+      return c.json({ error: 'Station/Office not found.' }, 404);
+    }
+
+    if (user.role === ROLES.DISTRICT_CO_ADMIN && target.district_id !== user.districtId) {
+      return c.json({ error: 'Forbidden: You may only edit station/office phone numbers within your assigned district.' }, 403);
+    }
+
+    const cleanPhone = phone.trim();
+    const now = new Date().toISOString();
+
+    await db
+      .prepare('UPDATE stations_offices SET phone = ?, updated_at = ? WHERE id = ?')
+      .bind(cleanPhone, now, stationId)
+      .run();
+
+    await logAuditEvent(db, {
+      actor: user,
+      action: 'UPDATE_STATION_PHONE',
+      entityType: 'STATION_OFFICE',
+      entityId: stationId,
+      districtScope: target.district_id,
+      beforeState: { phone: target.phone },
+      afterState: { phone: cleanPhone },
+    });
+
+    return c.json({
+      success: true,
+      message: `Phone number for ${target.name} updated to ${cleanPhone}.`,
+      phone: cleanPhone,
+    });
+  });
 
   // POST /api/admin/users/:userId/reset-password - Single-use reset token or new password
   router.post('/users/:userId/reset-password', async (c) => {

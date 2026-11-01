@@ -1,11 +1,12 @@
 import React from 'react';
-import { Shield, Bell, Moon, Sun, Globe, LogOut } from 'lucide-react';
+import { Shield, Bell, Moon, Sun, Globe, LogOut, MessageSquarePlus } from 'lucide-react';
 import { Button } from './Button';
 
 export interface TopBarProps {
   title?: string;
   unreadNoticesCount?: number;
   onNotificationsClick?: () => void;
+  onFeedbackClick?: () => void;
   onHomeClick?: () => void;
   isDarkMode?: boolean;
   onToggleTheme?: () => void;
@@ -19,6 +20,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   title = 'UP Police Directory',
   unreadNoticesCount = 0,
   onNotificationsClick,
+  onFeedbackClick,
   onHomeClick,
   isDarkMode = false,
   onToggleTheme,
@@ -95,6 +97,19 @@ export const TopBar: React.FC<TopBarProps> = ({
               className="w-9 h-9 min-w-[36px] min-h-[36px] text-red-300 hover:text-white hover:bg-red-500/30 rounded-full"
             >
               <LogOut className="w-4 h-4" />
+            </Button>
+          )}
+
+          {onFeedbackClick && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onFeedbackClick}
+              aria-label="Submit Feedback"
+              title="Real-Time Feedback (प्रतिपुष्टि)"
+              className="w-9 h-9 min-w-[36px] min-h-[36px] text-teal-300 hover:text-white hover:bg-white/10 rounded-full"
+            >
+              <MessageSquarePlus className="w-4 h-4" />
             </Button>
           )}
 

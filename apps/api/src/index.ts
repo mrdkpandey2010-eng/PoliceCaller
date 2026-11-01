@@ -11,6 +11,7 @@ import { createAdminRouter } from './routes/admin';
 import { createExcelRouter } from './routes/excel';
 import { createMastersRouter } from './routes/masters';
 import { createDiariesRouter } from './routes/diaries';
+import { createFeedbackRouter } from './routes/feedback';
 
 export interface Env {
   DB: D1Database;
@@ -111,6 +112,7 @@ export function createApp(dbInstance?: D1Database) {
   app.route('/api/admin/excel', createExcelRouter(targetDb));
   app.route('/api/masters', createMastersRouter(targetDb));
   app.route('/api/diaries', createDiariesRouter(targetDb));
+  app.route('/api/feedback', createFeedbackRouter(targetDb));
 
   return app;
 }

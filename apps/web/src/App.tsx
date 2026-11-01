@@ -12,6 +12,9 @@ import { Profile } from './pages/Profile';
 import { AdminDashboard } from './pages/Admin';
 import { TermsModal } from './components/TermsModal';
 import { NotificationPermissionModal } from './components/NotificationPermissionModal';
+import { FeedbackModal } from './components/FeedbackModal';
+import { CompulsoryNoticeModal } from './components/CompulsoryNoticeModal';
+import { api } from './services/api';
 import { ROLES } from '@police-directory/shared';
 
 export const AppContent: React.FC = () => {
@@ -32,6 +35,32 @@ export const AppContent: React.FC = () => {
   const [prefilledIdentifier, setPrefilledIdentifier] = useState('');
   const [activeTab, setActiveTab] = useState<NavTab>('directory');
   const [targetChatUserId, setTargetChatUserId] = useState<string | null>(null);
+
+  // Real-time Feedback & Compulsory Notices state
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
+  const [unreadNotices, setUnreadNotices] = useState<any[]>([]);
+
+  const checkUnreadNotices = async () => {
+    if (!user) return;
+    try {
+      const res = await api.getNotices();
+      const unread = (res.notices || []).filter((n: any) => !n.isRead || !n.isAcknowledged);
+      setUnreadNotices(unread);
+    } catch {
+      // Ignore network errors
+    }
+  };
+
+  React.useEffect(() => {
+    if (user) {
+      checkUnreadNotices();
+    }
+  }, [user]);
+
+  const handleAcknowledgeNotice = async (noticeId: string) => {
+    await api.acknowledgeNotice(noticeId);
+    setUnreadNotices((prev) => prev.filter((n) => n.id !== noticeId));
+  };
 
   // V4.8: Navigation history and Android Hardware Back vs Home
   const navigateToTab = (tab: NavTab) => {
@@ -149,7 +178,8 @@ export const AppContent: React.FC = () => {
         onToggleLanguage={toggleLanguage}
         isDarkMode={isDarkMode}
         onToggleTheme={toggleTheme}
-        unreadNoticesCount={0}
+        unreadNoticesCount={unreadNotices.length}
+        onFeedbackClick={() => setIsFeedbackOpen(true)}
         onHomeClick={() => navigateToTab('directory')}
         onNotificationsClick={() => navigateToTab('notices')}
         onLogout={logout}
@@ -250,6 +280,19 @@ export const AppContent: React.FC = () => {
         isOpen={showNotificationPrompt && !needsTermsAcceptance}
         onResolve={handleNotificationPermission}
         onDismiss={dismissNotificationPrompt}
+      />
+
+      {/* Mandatory Compulsory Notice Acknowledgment Gate (Requirement 2) */}
+      <CompulsoryNoticeModal
+        isOpen={unreadNotices.length > 0 && !needsTermsAcceptance}
+        notices={unreadNotices}
+        onAcknowledge={handleAcknowledgeNotice}
+      />
+
+      {/* Real-Time User Feedback Modal (Requirement 1) */}
+      <FeedbackModal
+        isOpen={isFeedbackOpen}
+        onClose={() => setIsFeedbackOpen(false)}
       />
     </div>
   );

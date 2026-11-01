@@ -17,6 +17,7 @@ const config: CapacitorConfig = {
   server: {
     androidScheme: 'https',
     cleartext: false,
+    url: 'https://police-directory-app.pages.dev',
   },
   plugins: {
     SplashScreen: {

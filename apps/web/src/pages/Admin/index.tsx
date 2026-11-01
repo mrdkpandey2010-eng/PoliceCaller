@@ -20,6 +20,8 @@ import {
   UserX,
   ShieldCheck,
   Building2,
+  MessageSquarePlus,
+  Star,
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -41,6 +43,10 @@ export const AdminDashboard: React.FC = () => {
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [backupStatus, setBackupStatus] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Real-time Feedbacks state (Requirement 1)
+  const [feedbacks, setFeedbacks] = useState<any[]>([]);
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
 
   // Super Admin Control: Co-Admin Excel Bulk Import toggle (Requirement 5)
   const [coAdminExcelEnabled, setCoAdminExcelEnabled] = useState<boolean>(true);
@@ -140,9 +146,28 @@ export const AdminDashboard: React.FC = () => {
       } else if (tab === 'backup' && isSuperAdmin) {
         const res = await api.getBackupStatus();
         setBackupStatus(res.latestBackup);
+      } else if (tab === 'feedbacks') {
+        setFeedbackLoading(true);
+        try {
+          const res = await api.getFeedbacks();
+          setFeedbacks(res.feedbacks || []);
+        } finally {
+          setFeedbackLoading(false);
+        }
       }
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleResolveFeedback = async (feedbackId: string, status: 'REVIEWED' | 'RESOLVED') => {
+    try {
+      await api.updateFeedbackStatus(feedbackId, { status });
+      setFeedbacks((prev) =>
+        prev.map((f) => (f.id === feedbackId ? { ...f, status } : f))
+      );
+    } catch (err: any) {
+      alert(err.message || 'Failed to update feedback status');
     }
   };
 
@@ -179,33 +204,37 @@ export const AdminDashboard: React.FC = () => {
 
   const handleSaveUserDetails = async () => {
     if (!editingUser) return;
-    if (!/^[a-zA-Z\s.]+$/.test(editFullName.trim())) {
-      alert('Full Name must contain English letters only.');
-      return;
-    }
     if (!/^[6-9]\d{9}$/.test(editMobile.trim())) {
       alert('Mobile Number must be a valid 10-digit Indian mobile number.');
       return;
     }
+    if (isSuperAdmin && !/^[a-zA-Z\s.]+$/.test(editFullName.trim())) {
+      alert('Full Name must contain English letters only.');
+      return;
+    }
     setEditSaving(true);
     try {
-      await api.updateUserDetails(editingUser.id, {
-        fullName: editFullName.trim(),
+      const payload: any = {
         mobile: editMobile.trim(),
-        designationId: editDesignationId || undefined,
-        email: editEmail.trim() || undefined,
-      });
+      };
+      if (isSuperAdmin) {
+        payload.fullName = editFullName.trim();
+        payload.designationId = editDesignationId || undefined;
+        payload.email = editEmail.trim() || undefined;
+      }
+
+      await api.updateUserDetails(editingUser.id, payload);
       const targetDesig = designations.find((d) => d.id === editDesignationId);
       setUsersList((prev) =>
         prev.map((u) =>
           u.id === editingUser.id
             ? {
                 ...u,
-                fullName: editFullName.trim(),
                 mobile: editMobile.trim(),
-                designationId: editDesignationId,
-                designationName: targetDesig ? targetDesig.name : u.designationName,
-                email: editEmail.trim() || u.email,
+                fullName: isSuperAdmin ? editFullName.trim() : u.fullName,
+                designationId: isSuperAdmin ? editDesignationId : u.designationId,
+                designationName: isSuperAdmin && targetDesig ? targetDesig.name : u.designationName,
+                email: isSuperAdmin ? editEmail.trim() || u.email : u.email,
               }
             : u
         )
@@ -418,6 +447,22 @@ export const AdminDashboard: React.FC = () => {
           }`}
         >
           Transfers Review
+        </button>
+        <button
+          onClick={() => loadTabContent('feedbacks')}
+          className={`px-3 py-2 rounded-xl font-bold transition-colors shrink-0 flex items-center gap-1.5 ${
+            activeTab === 'feedbacks'
+              ? 'bg-[#17324F] text-white'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <MessageSquarePlus className="w-3.5 h-3.5 text-[#147D84]" />
+          User Feedbacks
+          {feedbacks.filter((f) => f.status === 'PENDING').length > 0 && (
+            <span className="w-5 h-5 rounded-full bg-teal-600 text-white text-[10px] flex items-center justify-center font-mono">
+              {feedbacks.filter((f) => f.status === 'PENDING').length}
+            </span>
+          )}
         </button>
         {(isSuperAdmin || coAdminExcelEnabled) && (
           <button
@@ -811,6 +856,144 @@ export const AdminDashboard: React.FC = () => {
                   </div>
                 </Card>
               ))
+          )}
+        </div>
+      )}
+
+      {/* Tab: Real-Time User Feedbacks (Requirement 1) */}
+      {activeTab === 'feedbacks' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <MessageSquarePlus className="w-4 h-4 text-[#147D84]" />
+                User Real-Time Feedbacks & Grievances (अधिकारी प्रतिपुष्टि व सुझाव)
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {isSuperAdmin
+                  ? 'Statewide Officer Feedback: Review suggestions, bug reports, and data corrections from all 75 districts.'
+                  : `District Command Feedback: Review input and contact correction requests from ${user?.districtName || 'your district'} personnel.`}
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => loadTabContent('feedbacks')}
+              disabled={feedbackLoading}
+              aria-label="Refresh feedbacks"
+              className="text-xs font-bold"
+            >
+              Refresh Feedbacks
+            </Button>
+          </div>
+
+          {feedbackLoading ? (
+            <div className="flex justify-center py-12">
+              <span className="w-6 h-6 border-2 border-[#17324F] border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : feedbacks.length === 0 ? (
+            <Card className="p-8 text-center text-slate-400 text-xs">
+              No feedback or grievance records found in your administrative scope.
+            </Card>
+          ) : (
+            <div className="space-y-3">
+              {feedbacks.map((fb) => (
+                <Card key={fb.id} className="p-4 space-y-3">
+                  <div className="flex items-start justify-between flex-wrap gap-2">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          variant={
+                            fb.category === 'BUG_REPORT'
+                              ? 'danger'
+                              : fb.category === 'DATA_CORRECTION'
+                              ? 'warning'
+                              : fb.category === 'SUGGESTION'
+                              ? 'teal'
+                              : 'neutral'
+                          }
+                          size="sm"
+                        >
+                          {fb.category.replace('_', ' ')}
+                        </Badge>
+                        <Badge
+                          variant={
+                            fb.status === 'RESOLVED'
+                              ? 'success'
+                              : fb.status === 'REVIEWED'
+                              ? 'primary'
+                              : 'warning'
+                          }
+                          size="sm"
+                        >
+                          {fb.status}
+                        </Badge>
+                        <div className="flex items-center gap-0.5 ml-2">
+                          {[1, 2, 3, 4, 5].map((s) => (
+                            <Star
+                              key={s}
+                              className={`w-3.5 h-3.5 ${
+                                s <= fb.rating
+                                  ? 'fill-amber-400 text-amber-400'
+                                  : 'text-slate-200 dark:text-slate-700'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                      </div>
+
+                      <h4 className="text-sm font-bold text-slate-900 dark:text-white mt-1.5">
+                        {fb.subject}
+                      </h4>
+                      <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 whitespace-pre-wrap">
+                        {fb.message}
+                      </p>
+                    </div>
+
+                    <div className="text-right text-xs shrink-0">
+                      <span className="text-slate-400 text-[11px] font-mono block">
+                        {new Date(fb.createdAt).toLocaleDateString('en-IN', {
+                          day: '2-digit',
+                          month: 'short',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between flex-wrap gap-2 text-xs">
+                    <div className="text-slate-500 font-medium">
+                      By: <strong className="text-slate-800 dark:text-slate-200">{fb.userName}</strong> ({fb.designationShort || 'Officer'} • PNO: <span className="font-mono">{fb.userPno}</span>) • {fb.stationOfficeName}, {fb.districtName}
+                    </div>
+
+                    {fb.status === 'PENDING' && (
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleResolveFeedback(fb.id, 'REVIEWED')}
+                          aria-label="Mark feedback as reviewed"
+                          className="text-xs font-semibold"
+                        >
+                          Mark Reviewed
+                        </Button>
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={() => handleResolveFeedback(fb.id, 'RESOLVED')}
+                          aria-label="Resolve feedback"
+                          className="bg-emerald-600 hover:bg-emerald-700 text-xs font-bold text-white"
+                        >
+                          Resolve & Complete
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </Card>
+              ))}
+            </div>
           )}
         </div>
       )}
@@ -1268,16 +1451,22 @@ export const AdminDashboard: React.FC = () => {
         <div className="space-y-4">
           <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl text-xs text-amber-900 dark:text-amber-200">
             <strong>Immutable Identifier:</strong> PNO (<code>{editingUser?.pno}</code>) is permanent and cannot be modified.
+            {!isSuperAdmin && (
+              <span className="block mt-1 text-slate-600 dark:text-slate-400 font-medium">
+                Note: District Co-Admins are strictly authorized to edit officer contact numbers only.
+              </span>
+            )}
           </div>
 
           <div>
             <Input
-              label="Full Name (English letters only) *"
+              label={`Full Name (English letters only) ${!isSuperAdmin ? '(Read-Only for Co-Admin)' : '*'}`}
               value={editFullName}
               onChange={(e) => setEditFullName(e.target.value)}
               placeholder="e.g. Inspector Ramesh Kumar"
               englishOnlyNotice
-              required
+              disabled={!isSuperAdmin}
+              required={isSuperAdmin}
             />
           </div>
 
@@ -1294,12 +1483,15 @@ export const AdminDashboard: React.FC = () => {
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Designation / Rank
+              Designation / Rank {!isSuperAdmin && '(Read-Only for Co-Admin)'}
             </label>
             <select
               value={editDesignationId}
               onChange={(e) => setEditDesignationId(e.target.value)}
-              className="w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border text-sm transition-colors duration-150 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#17324F]"
+              disabled={!isSuperAdmin}
+              className={`w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border text-sm transition-colors duration-150 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#17324F] ${
+                !isSuperAdmin ? 'opacity-60 cursor-not-allowed bg-slate-100 dark:bg-slate-800' : ''
+              }`}
             >
               {designations.length === 0 ? (
                 <option value="" disabled>
@@ -1327,11 +1519,12 @@ export const AdminDashboard: React.FC = () => {
 
           <div>
             <Input
-              label="Official Email (Optional)"
+              label={`Official Email ${!isSuperAdmin ? '(Read-Only for Co-Admin)' : '(Optional)'}`}
               type="email"
               value={editEmail}
               onChange={(e) => setEditEmail(e.target.value)}
               placeholder="officer@uppolice.gov.in"
+              disabled={!isSuperAdmin}
             />
           </div>
         </div>

@@ -303,4 +303,23 @@ export const api = {
   getMasterImportHistory: () => request('/masters/bulk/history'),
 
   getPolicies: (type: string = 'TERMS') => request(`/masters/policies?type=${type}`),
+
+  // Station/Office contact phone update (Co-Admin district scoped and Super Admin)
+  updateStationPhone: (stationId: string, phone: string) =>
+    request(`/admin/stations/${stationId}/phone`, { method: 'PATCH', body: JSON.stringify({ phone }) }),
+
+  // Real-time Feedback
+  submitFeedback: (payload: { category: string; subject: string; message: string; rating?: number }) =>
+    request('/feedback', { method: 'POST', body: JSON.stringify(payload) }),
+
+  getFeedbacks: (params?: { status?: string; category?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.status) qs.append('status', params.status);
+    if (params?.category) qs.append('category', params.category);
+    const qStr = qs.toString();
+    return request(`/feedback${qStr ? `?${qStr}` : ''}`);
+  },
+
+  updateFeedbackStatus: (id: string, payload: { status: string; adminNotes?: string }) =>
+    request(`/feedback/${id}/status`, { method: 'PATCH', body: JSON.stringify(payload) }),
 };
