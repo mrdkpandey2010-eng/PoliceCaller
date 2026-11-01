@@ -5,16 +5,16 @@ import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { FeedbackModal } from '../../components/FeedbackModal';
-import { InstallInstructionsModal } from '../../components/InstallAppPrompt';
+import { usePWAInstall } from '../../components/InstallAppPrompt';
 
 export const Profile: React.FC = () => {
   const { user, logout } = useAuth();
   const { language } = useLanguage();
+  const { promptInstall } = usePWAInstall();
 
   const [districts, setDistricts] = useState<any[]>([]);
   const [stations, setStations] = useState<any[]>([]);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
-  const [showInstallModal, setShowInstallModal] = useState(false);
 
   // Transfer modal
   const [showTransferModal, setShowTransferModal] = useState(false);
@@ -127,7 +127,7 @@ export const Profile: React.FC = () => {
       <div className="pt-2">
         <Button
           variant="outline"
-          onClick={() => setShowInstallModal(true)}
+          onClick={promptInstall}
           aria-label="Install official mobile app"
           icon={<Smartphone className="w-4 h-4 text-[#C3A35E]" />}
           className="w-full font-bold py-2.5 rounded-2xl shadow-xs border-[#C3A35E]/40 text-slate-800 dark:text-slate-200 hover:bg-[#C3A35E]/10"
@@ -263,12 +263,6 @@ export const Profile: React.FC = () => {
           </div>
         </div>
       </Modal>
-
-      {/* Install Instructions Modal */}
-      <InstallInstructionsModal
-        isOpen={showInstallModal}
-        onClose={() => setShowInstallModal(false)}
-      />
     </div>
   );
 };

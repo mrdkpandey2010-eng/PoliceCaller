@@ -4,7 +4,7 @@ import { Shield, Lock, ArrowLeft, ArrowRight, Eye, EyeOff, AlertCircle, Clock, U
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { api } from '../../services/api';
-import { InstallAppBanner, InstallInstructionsModal } from '../../components/InstallAppPrompt';
+import { InstallAppBanner, usePWAInstall } from '../../components/InstallAppPrompt';
 
 export interface LoginProps {
   onNavigateToRegister?: (initialIdentifier?: string) => void;
@@ -13,7 +13,7 @@ export interface LoginProps {
 export const Login: React.FC<LoginProps> = ({ onNavigateToRegister }) => {
   const { login } = useAuth();
   const { language } = useLanguage();
-  const [installModalOpen, setInstallModalOpen] = useState(false);
+  const { promptInstall } = usePWAInstall();
 
   // Stage: 'identifier' | 'password'
   const [stage, setStage] = useState<'identifier' | 'password'>('identifier');
@@ -274,7 +274,7 @@ export const Login: React.FC<LoginProps> = ({ onNavigateToRegister }) => {
           </div>
           <button
             type="button"
-            onClick={() => setInstallModalOpen(true)}
+            onClick={promptInstall}
             aria-label="Install app"
             className="px-3 py-1.5 bg-[#17324F] hover:bg-[#10243B] text-[#C3A35E] font-bold text-xs rounded-xl flex items-center gap-1 shadow-xs border border-[#C3A35E]/30"
           >
@@ -283,11 +283,7 @@ export const Login: React.FC<LoginProps> = ({ onNavigateToRegister }) => {
           </button>
         </div>
 
-        <InstallAppBanner onOpenModal={() => setInstallModalOpen(true)} />
-        <InstallInstructionsModal
-          isOpen={installModalOpen}
-          onClose={() => setInstallModalOpen(false)}
-        />
+        <InstallAppBanner />
       </div>
     </div>
   );

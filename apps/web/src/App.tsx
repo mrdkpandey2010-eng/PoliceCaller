@@ -14,7 +14,7 @@ import { TermsModal } from './components/TermsModal';
 import { NotificationPermissionModal } from './components/NotificationPermissionModal';
 import { FeedbackModal } from './components/FeedbackModal';
 import { CompulsoryNoticeModal } from './components/CompulsoryNoticeModal';
-import { InstallAppBanner, InstallInstructionsModal } from './components/InstallAppPrompt';
+import { InstallAppBanner, usePWAInstall } from './components/InstallAppPrompt';
 import { api } from './services/api';
 import { ROLES } from '@police-directory/shared';
 
@@ -40,7 +40,7 @@ export const AppContent: React.FC = () => {
   // Real-time Feedback & Compulsory Notices state
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
   const [unreadNotices, setUnreadNotices] = useState<any[]>([]);
-  const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
+  const { promptInstall } = usePWAInstall();
 
   const checkUnreadNotices = async () => {
     if (!user) return;
@@ -182,7 +182,7 @@ export const AppContent: React.FC = () => {
         onToggleTheme={toggleTheme}
         unreadNoticesCount={unreadNotices.length}
         onFeedbackClick={() => setIsFeedbackOpen(true)}
-        onInstallClick={() => setIsInstallModalOpen(true)}
+        onInstallClick={promptInstall}
         onHomeClick={() => navigateToTab('directory')}
         onNotificationsClick={() => navigateToTab('notices')}
         onLogout={logout}
@@ -298,12 +298,8 @@ export const AppContent: React.FC = () => {
         onClose={() => setIsFeedbackOpen(false)}
       />
 
-      {/* PWA Floating Install Banner & Instruction Modal */}
-      <InstallAppBanner onOpenModal={() => setIsInstallModalOpen(true)} />
-      <InstallInstructionsModal
-        isOpen={isInstallModalOpen}
-        onClose={() => setIsInstallModalOpen(false)}
-      />
+      {/* PWA Floating Install Banner */}
+      <InstallAppBanner />
     </div>
   );
 };
