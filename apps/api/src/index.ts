@@ -39,13 +39,30 @@ export function createApp(dbInstance?: D1Database) {
     async exec() { return { count: 0, duration: 0 }; },
   };
 
-  // CORS middleware
+  // CORS middleware - Hardened for Official Portal & Secure Origins
+  const allowedOrigins = [
+    'https://police-directory-app.pages.dev',
+    'http://localhost:5173',
+    'http://localhost:4173',
+    'http://127.0.0.1:5173',
+  ];
+
   app.use(
     '*',
     cors({
-      origin: '*',
+      origin: (origin) => {
+        if (!origin) return '*';
+        if (
+          allowedOrigins.includes(origin) ||
+          origin.endsWith('.police-directory-app.pages.dev')
+        ) {
+          return origin;
+        }
+        return 'https://police-directory-app.pages.dev';
+      },
       allowHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
       allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      maxAge: 86400,
     })
   );
 

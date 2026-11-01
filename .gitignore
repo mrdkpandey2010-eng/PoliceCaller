@@ -6,8 +6,23 @@ local_d1.sqlite-shm
 local_d1.sqlite-wal
 *.log
 .env
+.env.*
+!.env.example
 .DS_Store
 Thumbs.db
+
+# Sensitive Database dumps, local backups & archives
+*.sqlite
+*.sqlite3
+database_backup.sql
+local_database.sqlite
+police_directory_backup.zip
+LAST_UPDATE.txt
+
+# Preserve version-controlled schema migrations & initial seeds only
+*.sql
+!db/migrations/*.sql
+!db/seeds/*.sql
 
 # Android
 .gradle/
