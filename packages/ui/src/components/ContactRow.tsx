@@ -64,9 +64,20 @@ export const ContactRow: React.FC<ContactRowProps> = ({
             <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
               {contact.fullName}
             </h4>
-            <span className="text-xs font-mono font-semibold tracking-wide text-slate-700 dark:text-slate-300 shrink-0">
-              {contact.mobile}
-            </span>
+            {contact.mobile ? (
+              <a
+                href={`tel:${contact.mobile}`}
+                onClick={(e) => e.stopPropagation()}
+                className="inline-flex items-center gap-1 text-xs font-mono font-semibold tracking-wide text-emerald-700 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 hover:underline shrink-0 px-2 py-0.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 transition-colors"
+                aria-label={`Call ${contact.fullName} at ${contact.mobile}`}
+                title={`Call ${contact.mobile}`}
+              >
+                <Phone className="w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <span>{contact.mobile}</span>
+              </a>
+            ) : (
+              <span className="text-xs font-mono text-slate-400 italic shrink-0">N/A</span>
+            )}
           </div>
 
           <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
@@ -111,9 +122,20 @@ export const ContactRow: React.FC<ContactRowProps> = ({
           </p>
 
           <div className="flex items-center gap-2 mt-1">
-            <span className="text-xs font-mono font-semibold tracking-wide text-slate-800 dark:text-slate-200">
-              {contact.mobile}
-            </span>
+            {contact.mobile ? (
+              <a
+                href={`tel:${contact.mobile}`}
+                onClick={(e) => e.stopPropagation()}
+                className="inline-flex items-center gap-1 text-xs font-mono font-semibold tracking-wide text-emerald-700 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 hover:underline px-2 py-0.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 transition-colors"
+                aria-label={`Call ${contact.fullName} at ${contact.mobile}`}
+                title={`Call ${contact.mobile}`}
+              >
+                <Phone className="w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <span>{contact.mobile}</span>
+              </a>
+            ) : (
+              <span className="text-xs font-mono text-slate-400 italic">N/A</span>
+            )}
             <button
               onClick={handleCopyNumber}
               aria-label={`Copy phone number for ${contact.fullName}`}

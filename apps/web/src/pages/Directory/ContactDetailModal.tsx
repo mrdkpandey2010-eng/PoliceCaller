@@ -85,9 +85,14 @@ export const ContactDetailModal: React.FC<ContactDetailModalProps> = ({
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
                 Complete Mobile Number
               </span>
-              <span className="font-mono text-base font-black text-slate-900 dark:text-white tracking-wide">
-                {contact.mobile}
-              </span>
+              <a
+                href={`tel:${contact.mobile}`}
+                className="font-mono text-base font-black text-slate-900 dark:text-white hover:text-emerald-600 dark:hover:text-emerald-400 tracking-wide hover:underline inline-flex items-center gap-1.5 transition-colors"
+                title={`Call ${contact.mobile}`}
+              >
+                <Phone className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                <span>{contact.mobile}</span>
+              </a>
             </div>
             <button
               onClick={handleCopyNumber}

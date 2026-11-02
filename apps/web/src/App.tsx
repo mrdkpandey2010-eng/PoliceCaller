@@ -266,7 +266,7 @@ export const AppContent: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 bg-gradient-to-b from-slate-50 via-slate-100/40 to-slate-200/30 dark:from-slate-950 dark:via-[#091420] dark:to-slate-950">
+    <div className="min-h-screen flex flex-col text-slate-900 dark:text-slate-100 bg-gradient-to-br from-[#F0F4F8] via-[#E8EFF6] to-[#DEE8F3] dark:from-[#091420] dark:via-[#0D1F33] dark:to-[#060D15] transition-colors">
       {/* Polished Top Bar - In-App Home Action (V4.8) */}
       <TopBar
         title={t('auth.loginTitle')}

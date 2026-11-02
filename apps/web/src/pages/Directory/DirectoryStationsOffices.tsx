@@ -60,10 +60,14 @@ export const DirectoryStationsOffices: React.FC<DirectoryStationsOfficesProps> =
   const fetchItems = async (pageToFetch: number = page) => {
     setLoading(true);
     try {
+      const isAll = selectedDistrict === 'ALL';
+      const districtParam = isAll ? undefined : (selectedDistrict || undefined);
+      const isOther = isAll || Boolean(selectedDistrict && user?.districtId && selectedDistrict !== user.districtId);
+
       const res: any = await api.searchStationsOffices({
         q: searchQuery,
-        districtId: selectedDistrict || undefined,
-        otherDistrict: otherDistrict || undefined,
+        districtId: districtParam,
+        otherDistrict: isOther ? true : undefined,
         type: selectedType || undefined,
         page: pageToFetch,
         limit: pageSize,
@@ -93,7 +97,7 @@ export const DirectoryStationsOffices: React.FC<DirectoryStationsOfficesProps> =
   useEffect(() => {
     setPage(1);
     fetchItems(1);
-  }, [selectedDistrict, otherDistrict, selectedType]);
+  }, [selectedDistrict, selectedType]);
 
   const handlePageChange = (newPage: number) => {
     if (newPage < 1 || newPage > totalPages) return;
@@ -109,7 +113,6 @@ export const DirectoryStationsOffices: React.FC<DirectoryStationsOfficesProps> =
 
   const handleClearFilters = () => {
     setSelectedDistrict('');
-    setOtherDistrict(false);
     setSelectedType('');
     setSearchQuery('');
     setPage(1);
@@ -148,30 +151,13 @@ export const DirectoryStationsOffices: React.FC<DirectoryStationsOfficesProps> =
               ? `My District Only (गृह जनपद)`
               : 'All Districts (75 Districts)'}
           </option>
+          <option value="ALL">All Districts (सभी 75 जनपद)</option>
           {districts.map((d) => (
             <option key={d.id} value={d.id}>
               {d.name}
             </option>
           ))}
         </select>
-
-        {/* Other District Toggle (Requirement 8.5) */}
-        <button
-          type="button"
-          onClick={() => {
-            setOtherDistrict((prev) => !prev);
-            setPage(1);
-          }}
-          className={`h-9 px-3 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 ${
-            otherDistrict
-              ? 'bg-amber-500/15 border-amber-500/50 text-amber-700 dark:text-amber-300 shadow-xs backdrop-blur-md'
-              : 'bg-white/80 dark:bg-slate-900/80 border-slate-200/80 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:bg-slate-100/70'
-          }`}
-          aria-label="Toggle other district stations"
-        >
-          <Filter className="w-3.5 h-3.5" />
-          <span>{otherDistrict ? 'अन्य जनपद: चालू' : 'अन्य जनपद (Other District)'}</span>
-        </button>
 
         {/* Unit Type Segmented Control */}
         <div className="flex items-center gap-1 bg-white/60 dark:bg-slate-800/60 backdrop-blur-md p-1 rounded-xl border border-slate-200/80 dark:border-white/10">
@@ -216,7 +202,7 @@ export const DirectoryStationsOffices: React.FC<DirectoryStationsOfficesProps> =
           </button>
         </div>
 
-        {(selectedDistrict || otherDistrict || selectedType || searchQuery) && (
+        {(selectedDistrict || selectedType || searchQuery) && (
           <button
             onClick={handleClearFilters}
             className="text-xs font-semibold text-slate-400 hover:text-red-500 ml-auto transition-colors"
@@ -247,38 +233,38 @@ export const DirectoryStationsOffices: React.FC<DirectoryStationsOfficesProps> =
             {items.map((item) => (
               <div
                 key={item.id}
-                className="p-4 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md rounded-2xl border border-slate-200/80 dark:border-white/10 shadow-xs hover:border-[#147D84]/40 transition-all flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+                className="px-3.5 py-2.5 sm:px-4 sm:py-3 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md rounded-2xl border border-slate-200/80 dark:border-white/10 shadow-xs hover:border-[#147D84]/40 hover:shadow-sm transition-all flex items-center justify-between gap-2.5"
               >
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
                       {item.name}
                     </h4>
-                    <Badge variant={item.type === 'POLICE_STATION' ? 'teal' : 'primary'} size="sm">
-                      {item.type === 'POLICE_STATION' ? 'Police Station' : item.type.replace('_', ' ')}
+                    <Badge variant={item.type === 'POLICE_STATION' ? 'teal' : 'primary'} size="sm" className="shrink-0 text-[10px] px-1.5 py-0.2">
+                      {item.type === 'POLICE_STATION' ? 'थाना' : 'कार्यालय'}
                     </Badge>
                   </div>
 
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-1">
-                    <MapPin className="w-3.5 h-3.5 text-[#147D84] shrink-0" />
-                    <span>
-                      District: <strong className="text-slate-700 dark:text-slate-300">{item.districtName}</strong>
-                    </span>
-                    {item.address && <span className="truncate ml-1">• {item.address}</span>}
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-1 truncate">
+                    <MapPin className="w-3 h-3 text-[#147D84] shrink-0" />
+                    <span className="font-semibold text-slate-700 dark:text-slate-300 shrink-0">{item.districtName}</span>
+                    {item.address && <span className="truncate text-slate-400">• {item.address}</span>}
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-1.5 shrink-0">
                   {item.phone ? (
                     <a
                       href={`tel:${item.phone}`}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-colors"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-colors shrink-0"
+                      aria-label={`Call ${item.name} at ${item.phone}`}
+                      title={`Call ${item.phone}`}
                     >
-                      <Phone className="w-3.5 h-3.5" />
-                      <span className="font-mono">{item.phone}</span>
+                      <Phone className="w-3 h-3 shrink-0" />
+                      <span className="font-mono text-xs">{item.phone}</span>
                     </a>
                   ) : (
-                    <span className="text-xs font-medium text-slate-400 italic">
+                    <span className="text-[11px] font-medium text-slate-400 italic px-2 py-1">
                       Not available
                     </span>
                   )}
@@ -291,10 +277,10 @@ export const DirectoryStationsOffices: React.FC<DirectoryStationsOfficesProps> =
                       size="sm"
                       onClick={() => handleOpenEditPhone(item)}
                       aria-label={`Edit contact number for ${item.name}`}
-                      className="text-xs px-2.5 py-1 text-[#147D84] border-[#147D84]/40 hover:bg-[#147D84]/10 font-bold"
+                      className="text-xs px-2 py-1 text-[#147D84] border-[#147D84]/40 hover:bg-[#147D84]/10 font-bold shrink-0"
                     >
                       <Edit2 className="w-3 h-3 mr-1 inline" />
-                      Edit Number
+                      Edit
                     </Button>
                   )}
                 </div>
