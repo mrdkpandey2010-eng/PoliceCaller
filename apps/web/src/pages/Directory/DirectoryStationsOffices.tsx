@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { SearchBar, Button, Badge, Modal, Input } from '@police-directory/ui';
-import { Building, Phone, MapPin, Filter, X, ChevronLeft, ChevronRight, Edit2 } from 'lucide-react';
+import { Building, Phone, MapPin, Filter, ChevronLeft, ChevronRight, Edit2 } from 'lucide-react';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { ROLES } from '@police-directory/shared';
@@ -13,6 +13,7 @@ export const DirectoryStationsOffices: React.FC<DirectoryStationsOfficesProps> =
   const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDistrict, setSelectedDistrict] = useState('');
+  const [otherDistrict, setOtherDistrict] = useState<boolean>(false);
   const [selectedType, setSelectedType] = useState<'POLICE_STATION' | 'OFFICE' | ''>('');
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -22,9 +23,13 @@ export const DirectoryStationsOffices: React.FC<DirectoryStationsOfficesProps> =
   const [newStationPhone, setNewStationPhone] = useState<string>('');
   const [savingPhone, setSavingPhone] = useState<boolean>(false);
 
-  // Pagination State (Max 100 per page, max 3 pages)
+  // Requirement 8: Pagination State (Exactly 50 per page, max 200 records / max 4 pages)
+  const pageSize = 50;
+  const maxResults = 200;
+  const maxPages = 4;
   const [page, setPage] = useState<number>(1);
-  const pageSize = 100;
+  const [totalCount, setTotalCount] = useState<number>(0);
+  const [totalPages, setTotalPages] = useState<number>(1);
 
   const handleOpenEditPhone = (stn: any) => {
     setEditingStation(stn);
@@ -52,26 +57,64 @@ export const DirectoryStationsOffices: React.FC<DirectoryStationsOfficesProps> =
     }
   };
 
-  const fetchItems = async () => {
+  const fetchItems = async (pageToFetch: number = page) => {
     setLoading(true);
-    setPage(1);
     try {
-      const res = await api.searchStationsOffices({
+      const res: any = await api.searchStationsOffices({
         q: searchQuery,
         districtId: selectedDistrict || undefined,
+        otherDistrict: otherDistrict || undefined,
         type: selectedType || undefined,
+        page: pageToFetch,
+        limit: pageSize,
       });
-      setItems(res.stationsOffices || []);
+
+      const returnedItems = res.stationsOffices || [];
+      setItems(returnedItems);
+
+      const serverTotal = typeof res.total === 'number' ? res.total : returnedItems.length;
+      const cappedTotal = Math.min(serverTotal, maxResults);
+      setTotalCount(cappedTotal);
+
+      const calculatedPages = Math.min(
+        res.totalPages || Math.ceil(cappedTotal / pageSize) || 1,
+        maxPages
+      );
+      setTotalPages(calculatedPages);
     } catch {
       setItems([]);
+      setTotalCount(0);
+      setTotalPages(1);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchItems();
-  }, [selectedDistrict, selectedType]);
+    setPage(1);
+    fetchItems(1);
+  }, [selectedDistrict, otherDistrict, selectedType]);
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage < 1 || newPage > totalPages) return;
+    setPage(newPage);
+    fetchItems(newPage);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleSearchSubmit = () => {
+    setPage(1);
+    fetchItems(1);
+  };
+
+  const handleClearFilters = () => {
+    setSelectedDistrict('');
+    setOtherDistrict(false);
+    setSelectedType('');
+    setSearchQuery('');
+    setPage(1);
+    fetchItems(1);
+  };
 
   return (
     <div className="space-y-4">
@@ -79,23 +122,32 @@ export const DirectoryStationsOffices: React.FC<DirectoryStationsOfficesProps> =
       <SearchBar
         value={searchQuery}
         onChange={(val) => setSearchQuery(val)}
-        onSubmit={fetchItems}
+        onSubmit={handleSearchSubmit}
         onClear={() => {
           setSearchQuery('');
-          fetchItems();
+          setPage(1);
+          fetchItems(1);
         }}
         placeholder="Search police station or office by name, district, or phone..."
       />
 
       {/* Filter Row */}
       <div className="flex flex-wrap items-center gap-2 text-xs">
+        {/* District Select */}
         <select
           value={selectedDistrict}
-          onChange={(e) => setSelectedDistrict(e.target.value)}
+          onChange={(e) => {
+            setSelectedDistrict(e.target.value);
+            setPage(1);
+          }}
           aria-label="Filter by district"
-          className="h-9 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold"
+          className="h-9 px-3 rounded-xl border border-slate-200/80 dark:border-white/10 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md text-xs font-semibold text-slate-800 dark:text-slate-100 shadow-xs focus:ring-2 focus:ring-[#147D84]/30"
         >
-          <option value="">All Districts (75 Districts)</option>
+          <option value="">
+            {user?.districtId
+              ? `My District Only (गृह जनपद)`
+              : 'All Districts (75 Districts)'}
+          </option>
           {districts.map((d) => (
             <option key={d.id} value={d.id}>
               {d.name}
@@ -103,42 +155,71 @@ export const DirectoryStationsOffices: React.FC<DirectoryStationsOfficesProps> =
           ))}
         </select>
 
-        <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+        {/* Other District Toggle (Requirement 8.5) */}
+        <button
+          type="button"
+          onClick={() => {
+            setOtherDistrict((prev) => !prev);
+            setPage(1);
+          }}
+          className={`h-9 px-3 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 ${
+            otherDistrict
+              ? 'bg-amber-500/15 border-amber-500/50 text-amber-700 dark:text-amber-300 shadow-xs backdrop-blur-md'
+              : 'bg-white/80 dark:bg-slate-900/80 border-slate-200/80 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:bg-slate-100/70'
+          }`}
+          aria-label="Toggle other district stations"
+        >
+          <Filter className="w-3.5 h-3.5" />
+          <span>{otherDistrict ? 'अन्य जनपद: चालू' : 'अन्य जनपद (Other District)'}</span>
+        </button>
+
+        {/* Unit Type Segmented Control */}
+        <div className="flex items-center gap-1 bg-white/60 dark:bg-slate-800/60 backdrop-blur-md p-1 rounded-xl border border-slate-200/80 dark:border-white/10">
           <button
-            onClick={() => setSelectedType('')}
+            onClick={() => {
+              setSelectedType('');
+              setPage(1);
+            }}
             className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-              selectedType === '' ? 'bg-white dark:bg-slate-900 shadow-xs text-slate-900 dark:text-white' : 'text-slate-500'
+              selectedType === ''
+                ? 'bg-white dark:bg-slate-900 shadow-xs text-slate-900 dark:text-white'
+                : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             All Units
           </button>
           <button
-            onClick={() => setSelectedType('POLICE_STATION')}
+            onClick={() => {
+              setSelectedType('POLICE_STATION');
+              setPage(1);
+            }}
             className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-              selectedType === 'POLICE_STATION' ? 'bg-white dark:bg-slate-900 shadow-xs text-[#147D84]' : 'text-slate-500'
+              selectedType === 'POLICE_STATION'
+                ? 'bg-white dark:bg-slate-900 shadow-xs text-[#147D84]'
+                : 'text-slate-500 hover:text-[#147D84]'
             }`}
           >
             Police Stations
           </button>
           <button
-            onClick={() => setSelectedType('OFFICE')}
+            onClick={() => {
+              setSelectedType('OFFICE');
+              setPage(1);
+            }}
             className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-              selectedType === 'OFFICE' ? 'bg-white dark:bg-slate-900 shadow-xs text-[#17324F]' : 'text-slate-500'
+              selectedType === 'OFFICE'
+                ? 'bg-white dark:bg-slate-900 shadow-xs text-[#17324F]'
+                : 'text-slate-500 hover:text-[#17324F]'
             }`}
           >
             Offices & Units
           </button>
         </div>
 
-        {(selectedDistrict || selectedType || searchQuery) && (
+        {(selectedDistrict || otherDistrict || selectedType || searchQuery) && (
           <button
-            onClick={() => {
-              setSelectedDistrict('');
-              setSelectedType('');
-              setSearchQuery('');
-              fetchItems();
-            }}
-            className="text-xs font-semibold text-slate-400 hover:text-red-500 ml-auto"
+            onClick={handleClearFilters}
+            className="text-xs font-semibold text-slate-400 hover:text-red-500 ml-auto transition-colors"
           >
             Clear Filters
           </button>
@@ -152,134 +233,132 @@ export const DirectoryStationsOffices: React.FC<DirectoryStationsOfficesProps> =
             <span className="w-6 h-6 border-2 border-[#17324F] border-t-transparent rounded-full animate-spin" />
           </div>
         ) : items.length === 0 ? (
-          <div className="text-center py-12 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-6">
+          <div className="text-center py-12 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md rounded-2xl border border-slate-200/80 dark:border-white/10 p-6 shadow-xs">
             <Building className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
-            <p className="text-sm font-bold text-slate-700 dark:text-slate-300">No police stations or offices found</p>
-            <p className="text-xs text-slate-400 mt-1">Try selecting another district or broadening your search keyword.</p>
+            <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
+              No police stations or offices found
+            </p>
+            <p className="text-xs text-slate-400 mt-1">
+              Try selecting &quot;अन्य जनपद (Other District)&quot; or broadening your search keyword.
+            </p>
           </div>
         ) : (
-          (() => {
-            const totalItems = items.length;
-            const totalPages = Math.min(Math.ceil(totalItems / pageSize) || 1, 3);
-            const displayedItems = items.slice((page - 1) * pageSize, page * pageSize);
-
-            return (
-              <>
-                {displayedItems.map((item) => (
-                  <div
-                    key={item.id}
-                    className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
-                          {item.name}
-                        </h4>
-                        <Badge variant={item.type === 'POLICE_STATION' ? 'teal' : 'primary'} size="sm">
-                          {item.type === 'POLICE_STATION' ? 'Police Station' : item.type.replace('_', ' ')}
-                        </Badge>
-                      </div>
-
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-1">
-                        <MapPin className="w-3.5 h-3.5 text-[#147D84]" />
-                        <span>District: <strong className="text-slate-700 dark:text-slate-300">{item.districtName}</strong></span>
-                        {item.address && <span className="truncate ml-1">• {item.address}</span>}
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                      {item.phone ? (
-                        <a
-                          href={`tel:${item.phone}`}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-colors"
-                        >
-                          <Phone className="w-3.5 h-3.5" />
-                          <span className="font-mono">{item.phone}</span>
-                        </a>
-                      ) : (
-                        <span className="text-xs font-medium text-slate-400 italic">
-                          Not available
-                        </span>
-                      )}
-
-                      {/* Co-Admin & Super Admin Phone Edit Action (Requirement 3) */}
-                      {(user?.role === ROLES.SUPER_ADMIN ||
-                        (user?.role === ROLES.DISTRICT_CO_ADMIN && user?.districtId === item.districtId)) && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleOpenEditPhone(item)}
-                          aria-label={`Edit contact number for ${item.name}`}
-                          className="text-xs px-2.5 py-1 text-[#147D84] border-[#147D84]/40 hover:bg-[#147D84]/10 font-bold"
-                        >
-                          <Edit2 className="w-3 h-3 mr-1 inline" />
-                          Edit Number
-                        </Button>
-                      )}
-                    </div>
+          <>
+            {items.map((item) => (
+              <div
+                key={item.id}
+                className="p-4 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md rounded-2xl border border-slate-200/80 dark:border-white/10 shadow-xs hover:border-[#147D84]/40 transition-all flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
+                      {item.name}
+                    </h4>
+                    <Badge variant={item.type === 'POLICE_STATION' ? 'teal' : 'primary'} size="sm">
+                      {item.type === 'POLICE_STATION' ? 'Police Station' : item.type.replace('_', ' ')}
+                    </Badge>
                   </div>
-                ))}
 
-                {/* Pagination Controls (Max 100/page, max 3 pages) */}
-                {totalItems > 0 && (
-                  <div className="mt-5 pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between flex-wrap gap-2 text-xs text-slate-600 dark:text-slate-400">
-                    <div>
-                      Showing{' '}
-                      <strong className="text-slate-900 dark:text-white">
-                        {(page - 1) * pageSize + 1}-{Math.min(page * pageSize, totalItems)}
-                      </strong>{' '}
-                      of <strong className="text-slate-900 dark:text-white">{totalItems}</strong> units
-                      {totalPages > 1 && (
-                        <span className="ml-1 text-slate-400">
-                          (Page {page} of {totalPages})
-                        </span>
-                      )}
-                    </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-1">
+                    <MapPin className="w-3.5 h-3.5 text-[#147D84] shrink-0" />
+                    <span>
+                      District: <strong className="text-slate-700 dark:text-slate-300">{item.districtName}</strong>
+                    </span>
+                    {item.address && <span className="truncate ml-1">• {item.address}</span>}
+                  </p>
+                </div>
 
-                    {totalPages > 1 && (
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          onClick={() => setPage((p) => Math.max(p - 1, 1))}
-                          disabled={page <= 1}
-                          className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-700 transition flex items-center gap-1"
-                        >
-                          <ChevronLeft className="h-3.5 w-3.5" />
-                          Prev
-                        </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  {item.phone ? (
+                    <a
+                      href={`tel:${item.phone}`}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-colors"
+                    >
+                      <Phone className="w-3.5 h-3.5" />
+                      <span className="font-mono">{item.phone}</span>
+                    </a>
+                  ) : (
+                    <span className="text-xs font-medium text-slate-400 italic">
+                      Not available
+                    </span>
+                  )}
 
-                        {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-                          <button
-                            key={p}
-                            onClick={() => setPage(p)}
-                            className={`h-7 w-7 rounded-lg text-xs font-bold transition ${
-                              page === p
-                                ? 'bg-[#17324F] text-white shadow-xs'
-                                : 'border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50'
-                            }`}
-                          >
-                            {p}
-                          </button>
-                        ))}
+                  {/* Co-Admin & Super Admin Phone Edit Action */}
+                  {(user?.role === ROLES.SUPER_ADMIN ||
+                    (user?.role === ROLES.DISTRICT_CO_ADMIN && user?.districtId === item.districtId)) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleOpenEditPhone(item)}
+                      aria-label={`Edit contact number for ${item.name}`}
+                      className="text-xs px-2.5 py-1 text-[#147D84] border-[#147D84]/40 hover:bg-[#147D84]/10 font-bold"
+                    >
+                      <Edit2 className="w-3 h-3 mr-1 inline" />
+                      Edit Number
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))}
 
-                        <button
-                          onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
-                          disabled={page >= totalPages}
-                          className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-700 transition flex items-center gap-1"
-                        >
-                          Next
-                          <ChevronRight className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    )}
+            {/* Pagination Controls (Requirement 8.3 & 8.4: 50 per page, max 200, max 4 pages) */}
+            {totalCount > 0 && (
+              <div className="mt-5 pt-3 border-t border-slate-200/80 dark:border-white/10 flex items-center justify-between flex-wrap gap-2 text-xs text-slate-600 dark:text-slate-400">
+                <div>
+                  Showing{' '}
+                  <strong className="text-slate-900 dark:text-white">
+                    {(page - 1) * pageSize + 1}-{Math.min(page * pageSize, totalCount)}
+                  </strong>{' '}
+                  of <strong className="text-slate-900 dark:text-white">{totalCount}</strong> stations/offices
+                  {totalPages > 1 && (
+                    <span className="ml-1 text-slate-400">
+                      (Page {page} of {totalPages})
+                    </span>
+                  )}
+                </div>
+
+                {totalPages > 1 && (
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => handlePageChange(Math.max(page - 1, 1))}
+                      disabled={page <= 1}
+                      className="px-2.5 py-1.5 rounded-lg border border-slate-200/80 dark:border-white/10 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md text-slate-700 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-700 transition flex items-center gap-1"
+                    >
+                      <ChevronLeft className="h-3.5 w-3.5" />
+                      Prev
+                    </button>
+
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                      <button
+                        key={p}
+                        onClick={() => handlePageChange(p)}
+                        className={`h-7 w-7 rounded-lg text-xs font-bold transition ${
+                          page === p
+                            ? 'bg-[#17324F] text-white shadow-xs'
+                            : 'border border-slate-200/80 dark:border-white/10 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    ))}
+
+                    <button
+                      onClick={() => handlePageChange(Math.min(page + 1, totalPages))}
+                      disabled={page >= totalPages}
+                      className="px-2.5 py-1.5 rounded-lg border border-slate-200/80 dark:border-white/10 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md text-slate-700 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-700 transition flex items-center gap-1"
+                    >
+                      Next
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </button>
                   </div>
                 )}
-              </>
-            );
-          })()
+              </div>
+            )}
+          </>
         )}
       </div>
 
-      {/* Edit Station Phone Modal (Requirement 3) */}
+      {/* Edit Station Phone Modal */}
       <Modal
         isOpen={Boolean(editingStation)}
         onClose={() => setEditingStation(null)}

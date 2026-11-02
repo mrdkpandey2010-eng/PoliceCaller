@@ -515,19 +515,19 @@ describe('V4 Targeted Fixes Comprehensive Integration Test Suite', () => {
   // ==========================================
   // V4.7 / V5: Home Personnel Directory 100/page Limit (Max 3 Pages)
   // ==========================================
-  describe('V4.7 / V5: Home Personnel Directory Pagination Limit', () => {
-    it('enforces maximum 100 records per page on directory API and returns pagination metadata (max 3 pages)', async () => {
+  describe('V4.7 / V5: Home Personnel Directory Pagination Limit (Master Prompt 50/page)', () => {
+    it('enforces maximum 50 records per page on directory API and returns pagination metadata (max 4 pages)', async () => {
       const res = await app.request('/api/directory?limit=200', {
         headers: { Authorization: `Bearer ${userAToken}` },
       });
       expect(res.status).toBe(200);
       const data = await res.json();
-      expect(data.limit).toBe(100); // Clamped to 100
+      expect(data.limit).toBe(50); // Clamped to 50
       expect(data).toHaveProperty('total');
       expect(data).toHaveProperty('page');
       expect(data).toHaveProperty('totalPages');
-      expect(data.totalPages).toBeLessThanOrEqual(3);
-      expect(data.contacts.length).toBeLessThanOrEqual(100);
+      expect(data.totalPages).toBeLessThanOrEqual(4);
+      expect(data.contacts.length).toBeLessThanOrEqual(50);
     });
   });
 

@@ -63,29 +63,29 @@ describe('V5 Targeted Fixes Comprehensive Integration Test Suite', () => {
   });
 
   // =========================================================================
-  // Requirement 1: Directory Pagination (Max 100 per page, max 3 pages)
+  // Requirement 1: Directory Pagination (50 per page, max 4 pages / 200 items)
   // =========================================================================
-  describe('Requirement 1: Directory Pagination Limits', () => {
-    it('clamps personnel directory limit to 100 and totalPages to max 3', async () => {
+  describe('Requirement 1: Directory Pagination Limits (Master Prompt: 50/page, max 4 pages)', () => {
+    it('clamps personnel directory limit to 50 and totalPages to max 4', async () => {
       const res = await app.request('/api/directory?limit=250&page=1', {
         headers: { Authorization: `Bearer ${userAToken}` },
       });
       expect(res.status).toBe(200);
       const data = await res.json();
-      expect(data.limit).toBe(100);
-      expect(data.totalPages).toBeLessThanOrEqual(3);
-      expect(data.contacts.length).toBeLessThanOrEqual(100);
+      expect(data.limit).toBe(50);
+      expect(data.totalPages).toBeLessThanOrEqual(4);
+      expect(data.contacts.length).toBeLessThanOrEqual(50);
     });
 
-    it('clamps stations/offices directory limit to 100 and totalPages to max 3', async () => {
+    it('clamps stations/offices directory limit to 50 and totalPages to max 4', async () => {
       const res = await app.request('/api/directory/stations-offices?limit=500&page=1', {
         headers: { Authorization: `Bearer ${userAToken}` },
       });
       expect(res.status).toBe(200);
       const data = await res.json();
-      expect(data.limit).toBe(100);
-      expect(data.totalPages).toBeLessThanOrEqual(3);
-      expect(data.stationsOffices.length).toBeLessThanOrEqual(100);
+      expect(data.limit).toBe(50);
+      expect(data.totalPages).toBeLessThanOrEqual(4);
+      expect(data.stationsOffices.length).toBeLessThanOrEqual(50);
     });
   });
 

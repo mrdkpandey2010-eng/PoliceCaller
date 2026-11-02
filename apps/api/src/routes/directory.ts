@@ -21,12 +21,16 @@ export function createDirectoryRouter(db: D1Database) {
 
     const q = (c.req.query('q') || '').trim();
     const districtId = c.req.query('districtId');
+    const otherDistrict = c.req.query('otherDistrict');
+    const isOtherDistrict = otherDistrict === 'true';
     const stationId = c.req.query('stationId');
     const designationId = c.req.query('designationId');
     const favoritesOnly = c.req.query('favorites') === 'true';
     const requestedLimit = Number(c.req.query('limit'));
-    const limit = Math.min(requestedLimit || 100, 100); // Max 100 records per page
-    const page = Math.min(Math.max(Number(c.req.query('page')) || 1, 1), 3); // Max 3 pages
+    const limit = Math.min(requestedLimit || 50, 50); // Exactly 50 records per page (Req 6.1)
+    const maxResults = 200; // Cap at max 200 results (Req 5.2)
+    const maxPages = 4;
+    const page = Math.min(Math.max(Number(c.req.query('page')) || 1, 1), maxPages); // Max 4 pages
     const offset = c.req.query('offset') ? Number(c.req.query('offset')) : (page - 1) * limit;
 
     // Track search query in recent_searches if provided
@@ -62,6 +66,10 @@ export function createDirectoryRouter(db: D1Database) {
     if (districtId) {
       sql += ` AND u.district_id = ?`;
       params.push(districtId);
+    } else if (!favoritesOnly && !isOtherDistrict && user.districtId && otherDistrict !== 'all') {
+      // Requirement 7.1: Other District Contacts Must Be Hidden by Default
+      sql += ` AND u.district_id = ?`;
+      params.push(user.districtId);
     }
 
     if (stationId) {
@@ -98,26 +106,67 @@ export function createDirectoryRouter(db: D1Database) {
 
     const { results: countRes } = await db.prepare(sql.replace(/SELECT\s+u\.id[\s\S]+?FROM/, 'SELECT count(*) as total FROM')).bind(...params).all<any>();
     const totalCount = countRes?.[0]?.total || 0;
+    const displayedTotal = Math.min(totalCount, maxResults);
+    const computedPages = Math.ceil(displayedTotal / limit) || 1;
+    const totalPages = Math.min(computedPages, maxPages);
 
-    // Default sorting: Prioritize user's assigned station/office first, then rank order, then name
-    sql += `
-      ORDER BY 
-        CASE WHEN u.station_office_id = ? THEN 0 ELSE 1 END,
-        des.rank_order ASC,
-        u.full_name ASC
-      LIMIT ? OFFSET ?
-    `;
-    params.push(user.stationOfficeId, limit, offset);
+    if (q) {
+      // Requirement 5.1: Relevance Sorting (Exact name, PNO, mobile, starts with, partials, station, district)
+      sql += `
+        ORDER BY 
+          CASE 
+            WHEN LOWER(u.full_name) = LOWER(?) THEN 1
+            WHEN u.pno = ? THEN 2
+            WHEN u.mobile = ? THEN 3
+            WHEN LOWER(u.full_name) LIKE ? THEN 4
+            WHEN LOWER(u.full_name) LIKE ? THEN 5
+            WHEN u.pno LIKE ? THEN 6
+            WHEN u.mobile LIKE ? THEN 7
+            WHEN LOWER(s.name) LIKE ? THEN 8
+            WHEN LOWER(d.name) LIKE ? THEN 9
+            ELSE 10
+          END ASC,
+          CASE WHEN u.station_office_id = ? THEN 0 ELSE 1 END,
+          des.rank_order ASC,
+          u.full_name ASC,
+          u.id ASC
+        LIMIT ? OFFSET ?
+      `;
+      const qLower = q.toLowerCase();
+      params.push(
+        q,
+        q,
+        q,
+        `${qLower}%`,
+        `%${qLower}%`,
+        `%${q}%`,
+        `%${q}%`,
+        `%${qLower}%`,
+        `%${qLower}%`,
+        user.stationOfficeId,
+        limit,
+        offset
+      );
+    } else {
+      // Default deterministic sorting
+      sql += `
+        ORDER BY 
+          CASE WHEN u.station_office_id = ? THEN 0 ELSE 1 END,
+          des.rank_order ASC,
+          u.full_name ASC,
+          u.id ASC
+        LIMIT ? OFFSET ?
+      `;
+      params.push(user.stationOfficeId, limit, offset);
+    }
 
     const { results } = await db.prepare(sql).bind(...params).all();
-
-    const computedPages = Math.ceil(totalCount / limit) || 1;
-    const totalPages = Math.min(computedPages, 3); // Max 3 pages visible
 
     return c.json({
       success: true,
       contacts: results,
-      total: totalCount,
+      total: displayedTotal,
+      rawTotal: totalCount,
       page,
       limit,
       totalPages,
@@ -125,7 +174,8 @@ export function createDirectoryRouter(db: D1Database) {
         page,
         limit,
         offset,
-        total: totalCount,
+        total: displayedTotal,
+        rawTotal: totalCount,
         totalPages,
         count: results.length,
       },
@@ -237,11 +287,15 @@ export function createDirectoryRouter(db: D1Database) {
     }
 
     const districtId = c.req.query('districtId');
+    const otherDistrict = c.req.query('otherDistrict');
+    const isOtherDistrict = otherDistrict === 'true';
     const type = c.req.query('type'); // 'POLICE_STATION' | 'OFFICE' | undefined
     const q = (c.req.query('q') || '').trim();
     const requestedLimit = Number(c.req.query('limit'));
-    const limit = Math.min(requestedLimit || 100, 100);
-    const page = Math.min(Math.max(Number(c.req.query('page')) || 1, 1), 3);
+    const limit = Math.min(requestedLimit || 50, 50); // Exactly 50 results per page (Req 8)
+    const maxResults = 200; // Cap at max 200 results (Req 8)
+    const maxPages = 4;
+    const page = Math.min(Math.max(Number(c.req.query('page')) || 1, 1), maxPages);
     const offset = (page - 1) * limit;
 
     let sql = `
@@ -256,6 +310,10 @@ export function createDirectoryRouter(db: D1Database) {
     if (districtId) {
       sql += ' AND s.district_id = ?';
       params.push(districtId);
+    } else if (!isOtherDistrict && user.districtId && otherDistrict !== 'all') {
+      // Requirement 8.5: Hide other-district station/thana results by default
+      sql += ' AND s.district_id = ?';
+      params.push(user.districtId);
     }
 
     if (type === 'POLICE_STATION') {
@@ -276,16 +334,39 @@ export function createDirectoryRouter(db: D1Database) {
       .bind(...params)
       .all<any>();
     const totalCount = countRes?.[0]?.total || 0;
-    const computedPages = Math.ceil(totalCount / limit) || 1;
-    const totalPages = Math.min(computedPages, 3);
+    const displayedTotal = Math.min(totalCount, maxResults);
+    const computedPages = Math.ceil(displayedTotal / limit) || 1;
+    const totalPages = Math.min(computedPages, maxPages);
 
-    // If limit parameter was explicitly set or if paginating, apply LIMIT & OFFSET
-    sql += ' ORDER BY d.name ASC, s.name ASC LIMIT ? OFFSET ?';
-    const { results } = await db.prepare(sql).bind(...params, limit, offset).all();
+    if (q) {
+      // Requirement 8.1: Relevant stations/thanas first
+      sql += `
+        ORDER BY
+          CASE 
+            WHEN LOWER(s.name) = LOWER(?) THEN 1
+            WHEN LOWER(s.name) LIKE ? THEN 2
+            WHEN s.phone = ? THEN 3
+            WHEN LOWER(d.name) = LOWER(?) THEN 4
+            ELSE 5
+          END ASC,
+          d.name ASC,
+          s.name ASC,
+          s.id ASC
+        LIMIT ? OFFSET ?
+      `;
+      const qLower = q.toLowerCase();
+      params.push(q, `${qLower}%`, q, q, limit, offset);
+    } else {
+      sql += ' ORDER BY d.name ASC, s.name ASC, s.id ASC LIMIT ? OFFSET ?';
+      params.push(limit, offset);
+    }
+
+    const { results } = await db.prepare(sql).bind(...params).all();
     return c.json({
       success: true,
       stationsOffices: results,
-      total: totalCount,
+      total: displayedTotal,
+      rawTotal: totalCount,
       page,
       limit,
       totalPages,

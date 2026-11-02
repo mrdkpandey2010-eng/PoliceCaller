@@ -73,10 +73,11 @@ export const api = {
     return request(`/directory/co-admins?${sp.toString()}`);
   },
 
-  searchStationsOffices: (params: { q?: string; districtId?: string; type?: 'POLICE_STATION' | 'OFFICE'; page?: number; limit?: number } = {}) => {
+  searchStationsOffices: (params: { q?: string; districtId?: string; otherDistrict?: boolean | string; type?: 'POLICE_STATION' | 'OFFICE'; page?: number; limit?: number } = {}) => {
     const sp = new URLSearchParams();
     if (params.q) sp.append('q', params.q);
     if (params.districtId) sp.append('districtId', params.districtId);
+    if (params.otherDistrict !== undefined) sp.append('otherDistrict', String(params.otherDistrict));
     if (params.type) sp.append('type', params.type);
     if (params.page) sp.append('page', String(params.page));
     if (params.limit) sp.append('limit', String(params.limit));

@@ -40,7 +40,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
         aria-label="Universal directory search"
-        className="w-full h-12 pl-11 pr-20 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-full text-sm font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#17324F] dark:focus:ring-teal-500 shadow-sm transition-all"
+        className="w-full h-12 pl-11 pr-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border border-slate-200/80 dark:border-white/10 rounded-full text-sm font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#147D84]/30 focus:border-[#147D84] dark:focus:ring-teal-500/30 shadow-xs transition-all"
       />
 
       <div className="absolute right-1.5 flex items-center gap-1">

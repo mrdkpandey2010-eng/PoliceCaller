@@ -8,6 +8,7 @@ export interface ContactData {
   pno: string;
   fullName: string;
   designationName: string;
+  designationShort?: string;
   districtName: string;
   stationOfficeName: string;
   mobile: string; // Full unmasked 10-digit mobile number
@@ -41,8 +42,8 @@ export const ContactRow: React.FC<ContactRowProps> = ({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // V4.7: On the Home personnel list card, display ONLY employee name and complete mobile number.
-  // Full details and actions (Call, Message, Favorite) are accessible in the single-person detail view upon click.
+  // Requirement 2.1: Main Directory Card displays Name, Rank/Designation, District Name, Police Station/Office Name and Mobile.
+  // STRICT CONSTRAINT: Do not change existing card height, width, padding or dimensions.
   if (!showFullDetails) {
     return (
       <div
@@ -56,15 +57,28 @@ export const ContactRow: React.FC<ContactRowProps> = ({
           }
         }}
         aria-label={`View details for ${contact.fullName}`}
-        className="flex items-center justify-between p-4 bg-white dark:bg-slate-900 hover:bg-slate-50/90 dark:hover:bg-slate-800/80 rounded-2xl border border-slate-200/80 dark:border-slate-800 transition-all duration-150 cursor-pointer shadow-xs active:scale-[0.99]"
+        className="flex items-center justify-between p-3.5 sm:p-4 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md hover:bg-white/95 dark:hover:bg-slate-800/90 rounded-2xl border border-slate-200/80 dark:border-white/10 transition-all duration-150 cursor-pointer shadow-xs hover:shadow-md active:scale-[0.99]"
       >
-        <div className="min-w-0 flex-1">
-          <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
-            {contact.fullName}
-          </h4>
-          <span className="text-xs font-mono font-semibold tracking-wide text-slate-600 dark:text-slate-300 block mt-1">
-            {contact.mobile}
-          </span>
+        <div className="min-w-0 flex-1 mr-2">
+          <div className="flex items-center justify-between gap-2">
+            <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
+              {contact.fullName}
+            </h4>
+            <span className="text-xs font-mono font-semibold tracking-wide text-slate-700 dark:text-slate-300 shrink-0">
+              {contact.mobile}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+            {(contact.designationShort || contact.designationName) && (
+              <span className="font-semibold text-[#147D84] dark:text-teal-400 shrink-0">
+                {contact.designationShort || contact.designationName} •
+              </span>
+            )}
+            <span className="truncate">
+              {contact.stationOfficeName}{contact.stationOfficeName && contact.districtName ? ', ' : ''}{contact.districtName}
+            </span>
+          </div>
         </div>
       </div>
     );
@@ -73,7 +87,7 @@ export const ContactRow: React.FC<ContactRowProps> = ({
   return (
     <div
       onClick={onClick}
-      className="group flex items-center justify-between p-3.5 bg-white dark:bg-slate-900 hover:bg-slate-50/80 dark:hover:bg-slate-800/60 rounded-2xl border border-slate-200/80 dark:border-slate-800/90 transition-all duration-150 cursor-pointer shadow-sm"
+      className="group flex items-center justify-between p-3.5 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md hover:bg-white/95 dark:hover:bg-slate-800/80 rounded-2xl border border-slate-200/80 dark:border-white/10 transition-all duration-150 cursor-pointer shadow-sm hover:shadow-md"
     >
       <div className="flex items-center gap-3 min-w-0 flex-1 mr-2">
         <Avatar

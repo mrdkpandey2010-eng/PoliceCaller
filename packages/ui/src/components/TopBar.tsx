@@ -32,7 +32,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   onLogout,
 }) => {
   return (
-    <header className="sticky top-0 z-30 w-full bg-[#17324F] text-white shadow-md border-b border-[#10243B]">
+    <header className="sticky top-0 z-30 w-full bg-[#17324F]/95 backdrop-blur-md text-white shadow-md border-b border-white/10">
       <div className="flex items-center justify-between h-14 px-4 max-w-7xl mx-auto">
         {/* Left: Official CCTNS Caller Logo & Title (In-App Home Action - V4.8) */}
         <div

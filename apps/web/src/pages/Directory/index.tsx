@@ -13,6 +13,7 @@ import {
   BookOpen,
   ChevronLeft,
   ChevronRight,
+  Globe,
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -22,17 +23,39 @@ import { DirectoryStationsOffices } from './DirectoryStationsOffices';
 import { DirectoryCoAdmins } from './DirectoryCoAdmins';
 import { ContactDiaries } from '../Diaries/ContactDiaries';
 
+export type DirectorySection = 'PERSONNEL' | 'STATIONS_OFFICES' | 'CO_ADMINS' | 'DIARIES';
+
 export interface DirectoryProps {
   onOpenChat: (userId: string) => void;
+  initialSection?: DirectorySection;
+  onSectionChange?: (section: DirectorySection) => void;
 }
 
-type DirectorySection = 'PERSONNEL' | 'STATIONS_OFFICES' | 'CO_ADMINS' | 'DIARIES';
-
-export const Directory: React.FC<DirectoryProps> = ({ onOpenChat }) => {
+export const Directory: React.FC<DirectoryProps> = ({
+  onOpenChat,
+  initialSection,
+  onSectionChange,
+}) => {
   const { user } = useAuth();
   const { language, t } = useLanguage();
 
-  const [activeSection, setActiveSection] = useState<DirectorySection>('PERSONNEL');
+  const [activeSection, setActiveSection] = useState<DirectorySection>(() => {
+    if (initialSection) return initialSection;
+    const hash = window.location.hash.toLowerCase();
+    if (hash === '#stations' || hash === '#stations-offices') return 'STATIONS_OFFICES';
+    if (hash === '#co-admins') return 'CO_ADMINS';
+    if (hash === '#diaries') return 'DIARIES';
+    const saved = sessionStorage.getItem('police_app_dir_section') as DirectorySection | null;
+    return saved && ['PERSONNEL', 'STATIONS_OFFICES', 'CO_ADMINS', 'DIARIES'].includes(saved)
+      ? saved
+      : 'PERSONNEL';
+  });
+
+  const handleSectionSwitch = (sec: DirectorySection) => {
+    setActiveSection(sec);
+    onSectionChange?.(sec);
+    sessionStorage.setItem('police_app_dir_section', sec);
+  };
 
   // Personnel State
   const [searchQuery, setSearchQuery] = useState('');
@@ -42,13 +65,15 @@ export const Directory: React.FC<DirectoryProps> = ({ onOpenChat }) => {
   const [stations, setStations] = useState<any[]>([]);
   const [designations, setDesignations] = useState<any[]>([]);
 
-  // Pagination State (Max 100 per page, max 3 pages)
+  // Requirement 6: Pagination State (Exactly 50 per page, max 200 records / max 4 pages)
+  const limit = 50;
+  const maxResults = 200;
   const [page, setPage] = useState<number>(1);
   const [totalCount, setTotalCount] = useState<number>(0);
   const [totalPages, setTotalPages] = useState<number>(1);
-  const limit = 100;
 
   // Filter selections
+  const [otherDistrict, setOtherDistrict] = useState<boolean>(false);
   const [selectedDistrict, setSelectedDistrict] = useState<string>('');
   const [selectedStation, setSelectedStation] = useState<string>('');
   const [selectedRank, setSelectedRank] = useState<string>('');
@@ -81,15 +106,18 @@ export const Directory: React.FC<DirectoryProps> = ({ onOpenChat }) => {
       const res = await api.getContacts({
         q: searchQuery,
         districtId: selectedDistrict,
+        otherDistrict: otherDistrict ? 'true' : 'false',
         stationId: selectedStation,
         designationId: selectedRank,
         favorites: favoritesOnly ? 'true' : undefined,
         page: pageToFetch,
         limit,
       });
+      const returnedTotal = res.total ?? res.rawTotal ?? (res.contacts?.length || 0);
+      const cappedTotal = Math.min(returnedTotal, maxResults);
       setContacts(res.contacts || []);
-      setTotalCount(res.total || 0);
-      setTotalPages(Math.min(res.totalPages || 1, 3));
+      setTotalCount(cappedTotal);
+      setTotalPages(Math.min(Math.ceil(cappedTotal / limit) || 1, 4));
     } catch {
       setContacts([]);
       setTotalCount(0);
@@ -103,7 +131,7 @@ export const Directory: React.FC<DirectoryProps> = ({ onOpenChat }) => {
     if (activeSection === 'PERSONNEL') {
       fetchContacts(page);
     }
-  }, [selectedDistrict, selectedStation, selectedRank, favoritesOnly, page, activeSection]);
+  }, [selectedDistrict, selectedStation, selectedRank, favoritesOnly, otherDistrict, page, activeSection]);
 
   const handleSearchSubmit = () => {
     setPage(1);
@@ -130,12 +158,14 @@ export const Directory: React.FC<DirectoryProps> = ({ onOpenChat }) => {
     Boolean(selectedDistrict) ||
     Boolean(selectedStation) ||
     Boolean(selectedRank) ||
+    otherDistrict ||
     favoritesOnly;
 
   const clearAllFilters = () => {
     setSelectedDistrict('');
     setSelectedStation('');
     setSelectedRank('');
+    setOtherDistrict(false);
     setFavoritesOnly(false);
     setSearchQuery('');
     setPage(1);
@@ -143,13 +173,13 @@ export const Directory: React.FC<DirectoryProps> = ({ onOpenChat }) => {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-4 pb-24 md:pb-8">
-      {/* Directory Category Segment Switcher (V4.4 & V4.5) */}
-      <div className="flex items-center gap-1.5 p-1 bg-slate-200/80 dark:bg-slate-800 rounded-2xl mb-4 overflow-x-auto scrollbar-none">
+      {/* Directory Category Segment Switcher - Polished Glassmorphism */}
+      <div className="flex items-center gap-1.5 p-1.5 bg-white/70 dark:bg-slate-900/70 backdrop-blur-md rounded-2xl border border-slate-200/80 dark:border-white/10 mb-4 overflow-x-auto scrollbar-none shadow-xs">
         <button
-          onClick={() => setActiveSection('PERSONNEL')}
+          onClick={() => handleSectionSwitch('PERSONNEL')}
           className={`flex-1 min-w-[120px] flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-bold transition-all ${
             activeSection === 'PERSONNEL'
-              ? 'bg-white dark:bg-slate-900 text-[#17324F] dark:text-teal-400 shadow-xs'
+              ? 'bg-white/95 dark:bg-slate-800/95 text-[#17324F] dark:text-teal-400 shadow-sm'
               : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
           }`}
         >
@@ -158,10 +188,10 @@ export const Directory: React.FC<DirectoryProps> = ({ onOpenChat }) => {
         </button>
 
         <button
-          onClick={() => setActiveSection('STATIONS_OFFICES')}
+          onClick={() => handleSectionSwitch('STATIONS_OFFICES')}
           className={`flex-1 min-w-[130px] flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-bold transition-all ${
             activeSection === 'STATIONS_OFFICES'
-              ? 'bg-white dark:bg-slate-900 text-[#17324F] dark:text-teal-400 shadow-xs'
+              ? 'bg-white/95 dark:bg-slate-800/95 text-[#17324F] dark:text-teal-400 shadow-sm'
               : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
           }`}
         >
@@ -170,10 +200,10 @@ export const Directory: React.FC<DirectoryProps> = ({ onOpenChat }) => {
         </button>
 
         <button
-          onClick={() => setActiveSection('CO_ADMINS')}
+          onClick={() => handleSectionSwitch('CO_ADMINS')}
           className={`flex-1 min-w-[110px] flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-bold transition-all ${
             activeSection === 'CO_ADMINS'
-              ? 'bg-white dark:bg-slate-900 text-[#17324F] dark:text-teal-400 shadow-xs'
+              ? 'bg-white/95 dark:bg-slate-800/95 text-[#17324F] dark:text-teal-400 shadow-sm'
               : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
           }`}
         >
@@ -182,10 +212,10 @@ export const Directory: React.FC<DirectoryProps> = ({ onOpenChat }) => {
         </button>
 
         <button
-          onClick={() => setActiveSection('DIARIES')}
+          onClick={() => handleSectionSwitch('DIARIES')}
           className={`flex-1 min-w-[120px] flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-bold transition-all ${
             activeSection === 'DIARIES'
-              ? 'bg-white dark:bg-slate-900 text-[#17324F] dark:text-teal-400 shadow-xs'
+              ? 'bg-white/95 dark:bg-slate-800/95 text-[#17324F] dark:text-teal-400 shadow-sm'
               : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
           }`}
         >
@@ -199,6 +229,7 @@ export const Directory: React.FC<DirectoryProps> = ({ onOpenChat }) => {
         <DirectoryStationsOffices districts={districts} />
       )}
 
+      {/* STRICT: Co-Admin Section Isolated & Untouched */}
       {activeSection === 'CO_ADMINS' && (
         <DirectoryCoAdmins districts={districts} onStartChat={onOpenChat} />
       )}
@@ -235,13 +266,30 @@ export const Directory: React.FC<DirectoryProps> = ({ onOpenChat }) => {
               onClick={() => setShowFilterSheet(!showFilterSheet)}
               aria-label="Toggle directory filter bottom sheet"
               icon={<Filter className="w-3.5 h-3.5" />}
-              className="rounded-full shrink-0"
+              className="rounded-full shrink-0 shadow-xs"
             >
               {language === 'hi' ? 'फ़िल्टर' : 'Filters'}
               {hasActiveFilters && (
                 <span className="w-2 h-2 rounded-full bg-[#147D84] ml-1" />
               )}
             </Button>
+
+            {/* Requirement 7.1: Other District Contacts Filter Toggle */}
+            <button
+              onClick={() => {
+                setOtherDistrict(!otherDistrict);
+                setPage(1);
+              }}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-semibold transition-all shrink-0 min-h-[36px] ${
+                otherDistrict
+                  ? 'bg-[#147D84] text-white border-[#147D84] shadow-xs'
+                  : 'border-slate-200/80 dark:border-white/10 text-slate-700 dark:text-slate-300 hover:bg-white/80 dark:hover:bg-slate-800'
+              }`}
+              title={otherDistrict ? 'Other Districts included' : 'Showing home district only (Other districts hidden)'}
+            >
+              <Globe className={`w-3.5 h-3.5 ${otherDistrict ? 'text-teal-200' : ''}`} />
+              {language === 'hi' ? 'अन्य जनपद' : 'Other District'}
+            </button>
 
             <button
               onClick={() => {
@@ -251,7 +299,7 @@ export const Directory: React.FC<DirectoryProps> = ({ onOpenChat }) => {
               className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-full border text-xs font-semibold transition-all shrink-0 min-h-[36px] ${
                 favoritesOnly
                   ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
-                  : 'border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  : 'border-slate-200/80 dark:border-white/10 text-slate-700 dark:text-slate-300 hover:bg-white/80 dark:hover:bg-slate-800'
               }`}
             >
               <Star className={`w-3.5 h-3.5 ${favoritesOnly ? 'fill-current' : ''}`} />
@@ -285,9 +333,9 @@ export const Directory: React.FC<DirectoryProps> = ({ onOpenChat }) => {
             )}
           </div>
 
-          {/* Cascading Filter Sheet / Drawer */}
+          {/* Cascading Filter Sheet / Drawer - Frosted Glass */}
           {showFilterSheet && (
-            <div className="mb-4 p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-md space-y-3 animate-in fade-in">
+            <div className="mb-4 p-4 bg-white/90 dark:bg-slate-900/90 backdrop-blur-lg rounded-2xl border border-slate-200/80 dark:border-white/10 shadow-lg space-y-3 animate-in fade-in">
               <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
                 <span className="text-xs font-bold text-slate-900 dark:text-white">
                   {language === 'hi' ? 'विभागीय फ़िल्टर' : 'Departmental Cascading Filters'}
@@ -311,7 +359,7 @@ export const Directory: React.FC<DirectoryProps> = ({ onOpenChat }) => {
                       setSelectedDistrict(e.target.value);
                       setPage(1);
                     }}
-                    className="w-full h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-medium"
+                    className="w-full h-10 px-3 rounded-xl border border-slate-200/80 dark:border-white/10 bg-white/80 dark:bg-slate-800/80 text-xs font-medium"
                   >
                     <option value="">{t('directory.allDistricts')}</option>
                     {districts.map((d) => (
@@ -333,7 +381,7 @@ export const Directory: React.FC<DirectoryProps> = ({ onOpenChat }) => {
                       setPage(1);
                     }}
                     disabled={!selectedDistrict}
-                    className="w-full h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-medium disabled:opacity-50"
+                    className="w-full h-10 px-3 rounded-xl border border-slate-200/80 dark:border-white/10 bg-white/80 dark:bg-slate-800/80 text-xs font-medium disabled:opacity-50"
                   >
                     <option value="">{t('directory.allStations')}</option>
                     {stations.map((s) => (
@@ -354,7 +402,7 @@ export const Directory: React.FC<DirectoryProps> = ({ onOpenChat }) => {
                       setSelectedRank(e.target.value);
                       setPage(1);
                     }}
-                    className="w-full h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-medium"
+                    className="w-full h-10 px-3 rounded-xl border border-slate-200/80 dark:border-white/10 bg-white/80 dark:bg-slate-800/80 text-xs font-medium"
                   >
                     <option value="">{t('directory.allRanks')}</option>
                     {designations.map((d) => (
@@ -368,7 +416,7 @@ export const Directory: React.FC<DirectoryProps> = ({ onOpenChat }) => {
             </div>
           )}
 
-          {/* Directory Contact List - V4.7 Minimal Card: only Name & Complete Number */}
+          {/* Directory Contact List - STRICT CONSTRAINT: Contact card height, width & dimensions preserved */}
           <div className="space-y-2 mt-2">
             {loading ? (
               <div className="flex flex-col items-center justify-center py-16 space-y-3">
@@ -378,13 +426,13 @@ export const Directory: React.FC<DirectoryProps> = ({ onOpenChat }) => {
                 </p>
               </div>
             ) : contacts.length === 0 ? (
-              <div className="text-center py-16 px-4 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800">
+              <div className="text-center py-16 px-4 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md rounded-3xl border border-slate-200/80 dark:border-white/10">
                 <Building className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
                 <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
                   {t('directory.noResults')}
                 </p>
                 <p className="text-xs text-slate-400 mt-1">
-                  Try adjusting your search query or cascading district filters.
+                  Try adjusting your search query, selecting Other District, or clearing filters.
                 </p>
               </div>
             ) : (
@@ -399,9 +447,9 @@ export const Directory: React.FC<DirectoryProps> = ({ onOpenChat }) => {
             )}
           </div>
 
-          {/* Server-Side Pagination Controls (Max 100/page, max 3 pages) */}
+          {/* Server-Side Pagination Controls - Exactly 50/page, max 200 / 4 pages (Req 6.1 & 6.2) */}
           {!loading && totalCount > 0 && (
-            <div className="mt-5 pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between flex-wrap gap-2 text-xs text-slate-600 dark:text-slate-400">
+            <div className="mt-5 pt-3 border-t border-slate-200/80 dark:border-white/10 flex items-center justify-between flex-wrap gap-2 text-xs text-slate-600 dark:text-slate-400">
               <div>
                 Showing{' '}
                 <strong className="text-slate-900 dark:text-white">
@@ -419,7 +467,7 @@ export const Directory: React.FC<DirectoryProps> = ({ onOpenChat }) => {
                 <button
                   onClick={() => setPage((p) => Math.max(p - 1, 1))}
                   disabled={page <= 1}
-                  className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-700 transition flex items-center gap-1"
+                  className="px-2.5 py-1.5 rounded-lg border border-slate-200/80 dark:border-white/10 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm text-slate-700 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white dark:hover:bg-slate-800 transition flex items-center gap-1 shadow-xs"
                 >
                   <ChevronLeft className="h-3.5 w-3.5" />
                   Prev
@@ -432,7 +480,7 @@ export const Directory: React.FC<DirectoryProps> = ({ onOpenChat }) => {
                     className={`h-7 w-7 rounded-lg text-xs font-bold transition ${
                       page === p
                         ? 'bg-[#17324F] text-white shadow-xs'
-                        : 'border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50'
+                        : 'border border-slate-200/80 dark:border-white/10 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 shadow-xs'
                     }`}
                   >
                     {p}
@@ -442,7 +490,7 @@ export const Directory: React.FC<DirectoryProps> = ({ onOpenChat }) => {
                 <button
                   onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
                   disabled={page >= totalPages}
-                  className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-700 transition flex items-center gap-1"
+                  className="px-2.5 py-1.5 rounded-lg border border-slate-200/80 dark:border-white/10 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm text-slate-700 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white dark:hover:bg-slate-800 transition flex items-center gap-1 shadow-xs"
                 >
                   Next
                   <ChevronRight className="h-3.5 w-3.5" />

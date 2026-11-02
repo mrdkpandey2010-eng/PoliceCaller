@@ -5,7 +5,7 @@ import { useLanguage } from './context/LanguageContext';
 import { useTheme } from './context/ThemeContext';
 import { Login } from './pages/Auth/Login';
 import { Register } from './pages/Auth/Register';
-import { Directory } from './pages/Directory';
+import { Directory, DirectorySection } from './pages/Directory';
 import { Messenger } from './pages/Messenger';
 import { Notices } from './pages/Notices';
 import { Profile } from './pages/Profile';
@@ -32,9 +32,45 @@ export const AppContent: React.FC = () => {
   const { language, toggleLanguage, t } = useLanguage();
   const { isDarkMode, toggleTheme } = useTheme();
 
+  const isAdmin = user?.role === ROLES.SUPER_ADMIN || user?.role === ROLES.DISTRICT_CO_ADMIN;
+
   const [authView, setAuthView] = useState<'login' | 'register'>('login');
   const [prefilledIdentifier, setPrefilledIdentifier] = useState('');
-  const [activeTab, setActiveTab] = useState<NavTab>('directory');
+
+  // Requirement 3: Routing & Refresh Preservation
+  const getInitialTab = (): NavTab => {
+    const hash = window.location.hash.toLowerCase().replace(/^#/, '');
+    if (['chats', 'notices', 'profile'].includes(hash)) {
+      return hash as NavTab;
+    }
+    if (hash === 'admin') {
+      return isAdmin ? 'admin' : 'directory';
+    }
+    if (['stations', 'stations-offices', 'co-admins', 'diaries', 'directory'].includes(hash)) {
+      return 'directory';
+    }
+    const saved = sessionStorage.getItem('police_app_active_tab') as NavTab | null;
+    if (saved && ['directory', 'chats', 'notices', 'profile', 'admin'].includes(saved)) {
+      if (saved === 'admin' && !isAdmin) return 'directory';
+      return saved;
+    }
+    return 'directory';
+  };
+
+  const getInitialDirectorySection = (): DirectorySection => {
+    const hash = window.location.hash.toLowerCase().replace(/^#/, '');
+    if (hash === 'stations' || hash === 'stations-offices') return 'STATIONS_OFFICES';
+    if (hash === 'co-admins') return 'CO_ADMINS';
+    if (hash === 'diaries') return 'DIARIES';
+    const saved = sessionStorage.getItem('police_app_dir_section') as DirectorySection | null;
+    if (saved && ['PERSONNEL', 'STATIONS_OFFICES', 'CO_ADMINS', 'DIARIES'].includes(saved)) {
+      return saved;
+    }
+    return 'PERSONNEL';
+  };
+
+  const [activeTab, setActiveTab] = useState<NavTab>(getInitialTab);
+  const [activeDirectorySection, setActiveDirectorySection] = useState<DirectorySection>(getInitialDirectorySection);
   const [targetChatUserId, setTargetChatUserId] = useState<string | null>(null);
 
   // Real-time Feedback & Compulsory Notices state
@@ -64,16 +100,47 @@ export const AppContent: React.FC = () => {
     setUnreadNotices((prev) => prev.filter((n) => n.id !== noticeId));
   };
 
-  // V4.8: Navigation history and Android Hardware Back vs Home
+  // Requirement 3: Navigate and sync history / URL hash / session
   const navigateToTab = (tab: NavTab) => {
-    if (tab === activeTab) return;
+    if (tab === 'admin' && !isAdmin) return;
     setActiveTab(tab);
-    window.history.pushState({ tab }, '', '#' + tab);
+    sessionStorage.setItem('police_app_active_tab', tab);
+
+    let targetHash = '#' + tab;
+    if (tab === 'directory') {
+      targetHash = activeDirectorySection === 'STATIONS_OFFICES' ? '#stations' :
+                   activeDirectorySection === 'CO_ADMINS' ? '#co-admins' :
+                   activeDirectorySection === 'DIARIES' ? '#diaries' : '#directory';
+    }
+    window.history.pushState({ tab, section: activeDirectorySection }, '', targetHash);
+  };
+
+  const handleDirectorySectionChange = (section: DirectorySection) => {
+    setActiveDirectorySection(section);
+    sessionStorage.setItem('police_app_dir_section', section);
+    if (activeTab === 'directory') {
+      const secHash = section === 'STATIONS_OFFICES' ? '#stations' :
+                      section === 'CO_ADMINS' ? '#co-admins' :
+                      section === 'DIARIES' ? '#diaries' : '#directory';
+      window.history.replaceState({ tab: 'directory', section }, '', secHash);
+    }
   };
 
   React.useEffect(() => {
-    if (!window.history.state) {
-      window.history.replaceState({ tab: 'directory' }, '', '#directory');
+    // Initial sync
+    const initialTab = getInitialTab();
+    const initialSec = getInitialDirectorySection();
+    setActiveTab(initialTab);
+    setActiveDirectorySection(initialSec);
+
+    let targetHash = '#' + initialTab;
+    if (initialTab === 'directory') {
+      targetHash = initialSec === 'STATIONS_OFFICES' ? '#stations' :
+                   initialSec === 'CO_ADMINS' ? '#co-admins' :
+                   initialSec === 'DIARIES' ? '#diaries' : '#directory';
+    }
+    if (window.location.hash !== targetHash) {
+      window.history.replaceState({ tab: initialTab, section: initialSec }, '', targetHash);
     }
 
     const handlePopState = (event: PopStateEvent) => {
@@ -87,9 +154,38 @@ export const AppContent: React.FC = () => {
         return;
       }
 
-      // 2. Return to previous tab or directory home
+      // 2. Determine target tab & section from hash or state
+      const hash = window.location.hash.toLowerCase().replace(/^#/, '');
+      if (['stations', 'stations-offices'].includes(hash)) {
+        setActiveTab('directory');
+        setActiveDirectorySection('STATIONS_OFFICES');
+        return;
+      }
+      if (hash === 'co-admins') {
+        setActiveTab('directory');
+        setActiveDirectorySection('CO_ADMINS');
+        return;
+      }
+      if (hash === 'diaries') {
+        setActiveTab('directory');
+        setActiveDirectorySection('DIARIES');
+        return;
+      }
+      if (['chats', 'notices', 'profile', 'admin', 'directory'].includes(hash)) {
+        if (hash === 'admin' && !isAdmin) {
+          setActiveTab('directory');
+        } else {
+          setActiveTab(hash as NavTab);
+        }
+        if (hash === 'directory') setActiveDirectorySection('PERSONNEL');
+        return;
+      }
+
       const targetTab = (event.state?.tab as NavTab) || 'directory';
-      setActiveTab(targetTab);
+      setActiveTab(targetTab === 'admin' && !isAdmin ? 'directory' : targetTab);
+      if (event.state?.section) {
+        setActiveDirectorySection(event.state.section);
+      }
     };
 
     window.addEventListener('popstate', handlePopState);
@@ -129,7 +225,7 @@ export const AppContent: React.FC = () => {
         capacitorListener.remove();
       }
     };
-  }, [activeTab]);
+  }, [isAdmin]);
 
   if (loading) {
     return (
@@ -164,15 +260,13 @@ export const AppContent: React.FC = () => {
     );
   }
 
-  const isAdmin = user.role === ROLES.SUPER_ADMIN || user.role === ROLES.DISTRICT_CO_ADMIN;
-
   const handleOpenChatWithUser = (userId: string) => {
     setTargetChatUserId(userId);
     navigateToTab('chats');
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 bg-gradient-to-b from-slate-50 via-slate-100/40 to-slate-200/30 dark:from-slate-950 dark:via-[#091420] dark:to-slate-950">
       {/* Polished Top Bar - In-App Home Action (V4.8) */}
       <TopBar
         title={t('auth.loginTitle')}
@@ -183,13 +277,16 @@ export const AppContent: React.FC = () => {
         unreadNoticesCount={unreadNotices.length}
         onFeedbackClick={() => setIsFeedbackOpen(true)}
         onInstallClick={promptInstall}
-        onHomeClick={() => navigateToTab('directory')}
+        onHomeClick={() => {
+          setActiveDirectorySection('PERSONNEL');
+          navigateToTab('directory');
+        }}
         onNotificationsClick={() => navigateToTab('notices')}
         onLogout={logout}
       />
 
-      {/* Desktop Responsive Navigation Bar */}
-      <div className="hidden md:flex items-center justify-center bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 shadow-xs">
+      {/* Desktop Responsive Navigation Bar with Frosted Glassmorphism */}
+      <div className="hidden md:flex items-center justify-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200/80 dark:border-white/10 shadow-xs">
         <div className="flex items-center gap-2 py-2 max-w-7xl mx-auto px-4">
           <button
             onClick={() => navigateToTab('directory')}
@@ -249,7 +346,11 @@ export const AppContent: React.FC = () => {
       {/* Main Content Area */}
       <main className="flex-1 w-full">
         {activeTab === 'directory' && (
-          <Directory onOpenChat={handleOpenChatWithUser} />
+          <Directory
+            onOpenChat={handleOpenChatWithUser}
+            initialSection={activeDirectorySection}
+            onSectionChange={handleDirectorySectionChange}
+          />
         )}
 
         {activeTab === 'chats' && (

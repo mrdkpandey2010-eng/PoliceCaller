@@ -24,6 +24,14 @@ describe('Directory & Search Integration Suite', () => {
       )
       .run();
 
+    // 1b. Approved Active User 2 in Lucknow SP Office
+    await db
+      .prepare(
+        `INSERT INTO users (id, pno, full_name, designation_id, district_id, station_office_id, mobile, status, role, password_hash)
+         VALUES ('usr_lko_2', '00554433', 'Suresh Raina', 'desig_const', 'dist_lucknow', 'stn_lko_sp_office', '9811223344', 'ACTIVE', 'USER', 'hash')`
+      )
+      .run();
+
     // 2. Active User in Varanasi Cantt
     await db
       .prepare(
@@ -74,15 +82,15 @@ describe('Directory & Search Integration Suite', () => {
     // Full unmasked mobile number must be present
     expect(nameData.contacts[0].mobile).toBe('9876543210');
 
-    // Search by PNO
-    const pnoSearch = await app.request('/api/directory?q=00998877', {
+    // Search by PNO (with otherDistrict=true per Req 7.3)
+    const pnoSearch = await app.request('/api/directory?q=00998877&otherDistrict=true', {
       headers: { Authorization: `Bearer ${activeUserToken}` },
     });
     const pnoData = await pnoSearch.json();
     expect(pnoData.contacts[0].fullName).toBe('Amitabh Bachchan');
 
-    // Search by District
-    const distSearch = await app.request('/api/directory?q=Varanasi', {
+    // Search by District (with otherDistrict=true per Req 7.3)
+    const distSearch = await app.request('/api/directory?q=Varanasi&otherDistrict=true', {
       headers: { Authorization: `Bearer ${activeUserToken}` },
     });
     const distData = await distSearch.json();
