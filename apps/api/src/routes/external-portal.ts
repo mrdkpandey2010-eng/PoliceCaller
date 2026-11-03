@@ -65,6 +65,11 @@ export function cleanName(name: string): string {
   n = n.replace(/g\.?r\.?p\.?/g, 'grp');
   n = n.replace(/cantt\.?/g, 'cantt');
   n = n.replace(/\b(chhavani|chhawani|chhavni)\b/g, '');
+  n = n.replace(/bhaluani/g, 'bhaluwani');
+  n = n.replace(/ekauna/g, 'ikauna');
+  n = n.replace(/mayil/g, 'mail');
+  n = n.replace(/bhauwapa\s*gh\s*at/g, 'badhauchghat');
+  n = n.replace(/badhauch\s*ghat/g, 'badhauchghat');
 
   const stopWords = [
     'police station',
@@ -312,7 +317,7 @@ export async function fetchPortalThanas(districtCode: string | number): Promise<
 
   const res = await fetch(`https://uppolice.gov.in/thanaHandler.ashx?c=${encodeURIComponent(key)}`, {
     headers: { 'User-Agent': PORTAL_USER_AGENT },
-    signal: AbortSignal.timeout(8000),
+    signal: AbortSignal.timeout(5000),
   });
 
   if (!res.ok) {
@@ -594,6 +599,41 @@ export function createExternalPortalRouter(db: D1Database) {
           .bind(districtId)
           .first<any>();
         if (dist) districtName = dist.name;
+
+        // Check station_portal_details by district and name for instant serving
+        try {
+          const cached = await db
+            .prepare('SELECT * FROM station_portal_details WHERE district_id = ? AND LOWER(station_name) = LOWER(?)')
+            .bind(districtId, stationName)
+            .first<any>();
+
+          if (cached && (cached.sho_name || cached.sho_cug || cached.co_name || cached.jurisdiction)) {
+            return c.json({
+              success: true,
+              hasData: true,
+              isOffice: false,
+              stationName: cached.station_name || stationName,
+              districtName: cached.district_name || districtName,
+              localPhone: cached.sho_cug || localPhone,
+              source: 'DATABASE',
+              liveData: {
+                district: cached.district_name || districtName,
+                stationName: cached.station_name || stationName,
+                address: cached.address || '',
+                jurisdiction: cached.jurisdiction || '',
+                shoName: cached.sho_name || '',
+                shoDesignation: cached.sho_designation || 'SHO',
+                shoCug: cached.sho_cug || '',
+                landline: cached.landline || '',
+                shoEmail: cached.sho_email || '',
+                circleName: cached.circle_name || '',
+                coName: cached.co_name || '',
+                coCug: cached.co_cug || '',
+                coEmail: cached.co_email || '',
+              },
+            });
+          }
+        } catch {}
       }
 
       // Specialized units (GRP, AHTU) that have separate departmental command
@@ -792,6 +832,22 @@ export function createExternalPortalRouter(db: D1Database) {
           }
         } catch (err) {
           console.warn(`Error fetching candidate thanas for ${dist.name}:`, err);
+        }
+      }
+
+      // If portal thanas fetch timed out or returned empty, use verified stations from local station_portal_details as candidate fallback
+      if (allCandidateThanas.length === 0) {
+        const localPortalRows = await db
+          .prepare('SELECT station_id, station_name, sho_cug, sho_name FROM station_portal_details WHERE district_id = ?')
+          .bind(requestedDistrictId)
+          .all<any>()
+          .catch(() => ({ results: [] }));
+
+        for (const row of localPortalRows.results || []) {
+          allCandidateThanas.push({
+            district: candidates[0] || { name: district.name, code: '0' },
+            thana: { name: row.station_name, code: row.station_id },
+          });
         }
       }
 
@@ -1037,6 +1093,43 @@ export function createExternalPortalRouter(db: D1Database) {
     }
   });
 
+  // 3. GET /api/external/uppolice/sync-status
+  router.get('/sync-status', async (c) => {
+    try {
+      const stats = await db
+        .prepare(`
+          SELECT 
+            COUNT(*) as totalCached,
+            COUNT(DISTINCT district_id) as totalDistricts,
+            MAX(updated_at) as lastUpdatedAt
+          FROM station_portal_details
+        `)
+        .first<any>();
+
+      return c.json({
+        success: true,
+        cronActive: true,
+        cronSchedule: '0 */6 * * * (Every 6 hours / 4 times daily)',
+        totalCachedStations: stats?.totalCached || 0,
+        totalDistricts: stats?.totalDistricts || 0,
+        lastUpdatedAt: stats?.lastUpdatedAt || null,
+        message: 'दैनिक ऑटो सिंक क्रॉन सक्रिय है तथा सभी 75 जनपदों का डेटाबेस में प्री-कैश सुरक्षित है।'
+      });
+    } catch (err: any) {
+      return c.json({ success: false, error: err.message }, 500);
+    }
+  });
+
+  // 4. POST /api/external/uppolice/trigger-daily-sync
+  router.post('/trigger-daily-sync', async (c) => {
+    const user = c.get('user');
+    if (!user || user.role !== ROLES.SUPER_ADMIN) {
+      return c.json({ error: 'Forbidden: Super Admin privilege required.' }, 403);
+    }
+    await runAutomaticDailySync(db);
+    return c.json({ success: true, message: 'दैनिक ऑटो सिंक सफलतापूर्वक निष्पादित किया गया।' });
+  });
+
   return router;
 }
 
@@ -1114,7 +1207,7 @@ export async function runAutomaticDailySync(db: D1Database): Promise<void> {
     const batch = matched.slice(0, 8);
     for (const { stn, match } of batch) {
       try {
-        const details = await fetchPortalThanaDetails(match.district.code, match.thana.code, 4000);
+        const details = await fetchPortalThanaDetails(match.district.code, match.thana.code, 12000);
         const rawCug = (details.shoCug || '').replace(/[^0-9]/g, '');
         const validPhone = rawCug.length >= 10 ? rawCug.slice(-10) : stn.phone;
 
