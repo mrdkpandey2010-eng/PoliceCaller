@@ -12,7 +12,7 @@ import { createExcelRouter } from './routes/excel';
 import { createMastersRouter } from './routes/masters';
 import { createDiariesRouter } from './routes/diaries';
 import { createFeedbackRouter } from './routes/feedback';
-import { createExternalPortalRouter } from './routes/external-portal';
+import { createExternalPortalRouter, runAutomaticDailySync } from './routes/external-portal';
 
 export interface Env {
   DB: D1Database;
@@ -151,5 +151,8 @@ export default {
   async fetch(request: Request, env: Env, ctx: any) {
     const app = createApp(env.DB);
     return app.fetch(request, env, ctx);
+  },
+  async scheduled(controller: any, env: Env, ctx: any) {
+    ctx.waitUntil(runAutomaticDailySync(env.DB));
   },
 };

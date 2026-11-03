@@ -95,6 +95,7 @@ export function cleanName(name: string): string {
   let cleaned = n.replace(/[^a-z0-9]/g, '').trim();
 
   // Deduplicate identical repeated tokens (e.g. bakshikatalabbakshikatalab -> bakshikatalab)
+  cleaned = cleaned.replace(/(bbd)+/g, 'bbd');
   cleaned = cleaned.replace(/(bakshikatalab)+/g, 'bakshikatalab');
   cleaned = cleaned.replace(/(cantt)+/g, 'cantt');
   cleaned = cleaned.replace(/(hazratganj)+/g, 'hazratganj');
@@ -150,19 +151,17 @@ export function parseThanaDetailsHtml(html: string): ParsedThanaDetails {
           result.circleName = val;
         } else if (key.includes('email')) {
           result.coEmail = val;
-        } else if (key.includes('name of co') || key.includes('acp')) {
-          result.coName = val;
-        } else if (key.includes('contact no') || key.includes('cug')) {
+        } else if (key.includes('contact') || key.includes('cug')) {
           result.coCug = val;
+        } else if (key.includes('co') || key.includes('acp')) {
+          result.coName = val;
         }
       }
 
       // Check Table format with SHO: [photo, name, designation, mobile, other, email]
       if (cells.length >= 5) {
-        const isHeader = cells.some((c) => {
-          const lower = c.toLowerCase();
-          return lower.includes('photograph') || lower.includes('name of sho') || lower.includes('designation') || lower.includes('mobile number');
-        });
+        const firstTwo = `${cells[0]} ${cells[1]}`.toLowerCase();
+        const isHeader = firstTwo.includes('photograph') || firstTwo.includes('name of sho');
         if (!isHeader && (cells[1] || cells[2] || cells[3])) {
           result.shoName = cells[1] || '';
           result.shoDesignation = cells[2] || 'SHO';
@@ -344,7 +343,7 @@ export async function fetchPortalThanas(districtCode: string | number): Promise<
 export async function fetchPortalThanaDetails(
   districtCode: string | number,
   thanaCode: string | number,
-  timeoutMs: number = 7000
+  timeoutMs: number = 15000
 ): Promise<ParsedThanaDetails> {
   const cacheKey = `${districtCode}:${thanaCode}`;
   const now = Date.now();
@@ -465,6 +464,36 @@ export async function matchStationOnPortal(
   return null;
 }
 
+// Ensure portal cache table exists safely
+export async function ensurePortalTable(db: D1Database): Promise<void> {
+  try {
+    await db
+      .prepare(`
+        CREATE TABLE IF NOT EXISTS station_portal_details (
+          station_id TEXT PRIMARY KEY,
+          district_id TEXT,
+          district_name TEXT,
+          station_name TEXT,
+          sho_name TEXT,
+          sho_designation TEXT,
+          sho_cug TEXT,
+          landline TEXT,
+          sho_email TEXT,
+          circle_name TEXT,
+          co_name TEXT,
+          co_cug TEXT,
+          co_email TEXT,
+          jurisdiction TEXT,
+          address TEXT,
+          updated_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+        )
+      `)
+      .run();
+  } catch {
+    // Ignore if table already exists or DDL is managed by migrations
+  }
+}
+
 export function createExternalPortalRouter(db: D1Database) {
   const router = new Hono<{
     Variables: {
@@ -473,117 +502,191 @@ export function createExternalPortalRouter(db: D1Database) {
   }>();
 
   // 1. GET /api/external/uppolice/thana-details
-  // Retrieves live, up-to-the-minute officer & jurisdiction details from UP Police Portal
+  // Retrieves live or pre-synced officer & jurisdiction details (Zero latency if in database)
   router.get('/thana-details', async (c) => {
-    const stationId = c.req.query('stationId');
-    const districtIdParam = c.req.query('districtId');
-    const stationNameParam = c.req.query('stationName');
-
-    let stationName = stationNameParam || '';
-    let districtId = districtIdParam || '';
-    let districtName = '';
-    let stationType = 'POLICE_STATION';
-    let localPhone = '';
-
-    if (stationId) {
-      const stn = await db
-        .prepare(`
-          SELECT s.id, s.name, s.type, s.phone, s.district_id, d.name AS district_name
-          FROM stations_offices s
-          LEFT JOIN districts d ON s.district_id = d.id
-          WHERE s.id = ?
-        `)
-        .bind(stationId)
-        .first<any>();
-
-      if (!stn) {
-        return c.json({ error: 'Station or office not found in directory.' }, 404);
-      }
-
-      stationType = stn.type;
-      stationName = stn.name;
-      districtId = stn.district_id;
-      districtName = stn.district_name || '';
-      localPhone = stn.phone || '';
-
-      // Offices have no portal records; they are departmentally managed
-      if (stationType !== 'POLICE_STATION') {
-        return c.json({
-          success: true,
-          isOffice: true,
-          stationName,
-          districtName,
-          localPhone,
-          message: 'यह एक विभागीय कार्यालय है। कार्यालयों का संपर्क नंबर सीधे विभागीय को-एडमिन द्वारा प्रबंधित किया जाता है।',
-        });
-      }
-    } else {
-      if (!stationName || !districtId) {
-        return c.json({ error: 'Missing stationId or both stationName and districtId parameters.' }, 400);
-      }
-      const dist = await db
-        .prepare('SELECT id, name FROM districts WHERE id = ?')
-        .bind(districtId)
-        .first<any>();
-      if (dist) districtName = dist.name;
-    }
-
     try {
+      const stationId = c.req.query('stationId');
+      const districtIdParam = c.req.query('districtId');
+      const stationNameParam = c.req.query('stationName');
+
+      let stationName = stationNameParam || '';
+      let districtId = districtIdParam || '';
+      let districtName = '';
+      let stationType = 'POLICE_STATION';
+      let localPhone = '';
+
+      if (stationId) {
+        const stn = await db
+          .prepare(`
+            SELECT s.id, s.name, s.type, s.phone, s.district_id, d.name AS district_name
+            FROM stations_offices s
+            LEFT JOIN districts d ON s.district_id = d.id
+            WHERE s.id = ?
+          `)
+          .bind(stationId)
+          .first<any>();
+
+        if (!stn) {
+          return c.json({ error: 'Station or office not found in directory.' }, 404);
+        }
+
+        stationType = stn.type;
+        stationName = stn.name;
+        districtId = stn.district_id;
+        districtName = stn.district_name || '';
+        localPhone = stn.phone || '';
+
+        // Offices have no portal records; they are departmentally managed
+        if (stationType !== 'POLICE_STATION') {
+          return c.json({
+            success: true,
+            hasData: false,
+            isOffice: true,
+            stationName,
+            districtName,
+            localPhone,
+            message: 'यह एक विभागीय कार्यालय है। कार्यालयों का संपर्क नंबर सीधे विभागीय को-एडमिन द्वारा प्रबंधित किया जाता है।',
+          });
+        }
+
+        // Check database cache first for instant (<10ms) zero-latency display
+        try {
+          const cached = await db
+            .prepare('SELECT * FROM station_portal_details WHERE station_id = ?')
+            .bind(stationId)
+            .first<any>();
+
+          if (cached && (cached.sho_name || cached.sho_cug || cached.co_name || cached.jurisdiction)) {
+            return c.json({
+              success: true,
+              hasData: true,
+              isOffice: false,
+              stationName: cached.station_name || stationName,
+              districtName: cached.district_name || districtName,
+              localPhone: cached.sho_cug || localPhone,
+              source: 'DATABASE',
+              liveData: {
+                district: cached.district_name || districtName,
+                stationName: cached.station_name || stationName,
+                address: cached.address || '',
+                jurisdiction: cached.jurisdiction || '',
+                shoName: cached.sho_name || '',
+                shoDesignation: cached.sho_designation || 'SHO',
+                shoCug: cached.sho_cug || '',
+                landline: cached.landline || '',
+                shoEmail: cached.sho_email || '',
+                circleName: cached.circle_name || '',
+                coName: cached.co_name || '',
+                coCug: cached.co_cug || '',
+                coEmail: cached.co_email || '',
+              },
+            });
+          }
+        } catch {
+          // Fall through to live lookup if table read fails
+        }
+      } else {
+        if (!stationName || !districtId) {
+          return c.json({ error: 'Missing stationId or both stationName and districtId parameters.' }, 400);
+        }
+        const dist = await db
+          .prepare('SELECT id, name FROM districts WHERE id = ?')
+          .bind(districtId)
+          .first<any>();
+        if (dist) districtName = dist.name;
+      }
+
       // Specialized units (GRP, AHTU) that have separate departmental command
       const normStn = stationName.toLowerCase();
-      if (normStn.includes('grp') || normStn.includes('railway')) {
+      if (normStn.includes('grp') || normStn.includes('railway') || normStn.includes('ahtu')) {
         return c.json({
-          success: false,
+          success: true,
+          hasData: false,
           fallback: true,
           stationName,
           districtName,
           localPhone,
-          message: 'यह एक राजकीय रेलवे पुलिस (GRP) थाना है। इसका संपर्क सीधे रेलवे अनुभाग एवं विभागीय डायरेक्टरी द्वारा संचालित है।',
-        });
-      }
-      if (normStn.includes('ahtu')) {
-        return c.json({
-          success: false,
-          fallback: true,
-          stationName,
-          districtName,
-          localPhone,
-          message: 'यह मानव तस्करी रोधी इकाई (AHTU) विशेष विंग है। इसका संपर्क सीधे जिला नियंत्रण कक्ष द्वारा संचालित है।',
+          message: 'उपलब्ध नहीं है',
         });
       }
 
       const candidates = await findPortalDistrictCandidates(districtId, districtName);
       if (candidates.length === 0) {
         return c.json({
-          success: false,
+          success: true,
+          hasData: false,
           fallback: true,
           stationName,
           districtName,
           localPhone,
-          message: `पोर्टल पर जनपद '${districtName}' का समकक्ष रिकॉर्ड नहीं मिला। डेटाबेस का नंबर उपलब्ध है।`,
+          message: 'उपलब्ध नहीं है',
         });
       }
 
       const match = await matchStationOnPortal(candidates, stationName);
       if (!match) {
         return c.json({
-          success: false,
+          success: true,
+          hasData: false,
           fallback: true,
           stationName,
           districtName,
           localPhone,
-          message: `UP Police पोर्टल पर '${stationName}' के नाम से सीधे कोई सक्रिय थाना मैप नहीं हुआ।`,
+          message: 'उपलब्ध नहीं है',
         });
       }
 
       const details = await fetchPortalThanaDetails(match.district.code, match.thana.code);
 
+      // Save into station_portal_details for instant subsequent user lookups
+      if (stationId) {
+        const rawCug = (details.shoCug || '').replace(/[^0-9]/g, '');
+        const validPhone = rawCug.length >= 10 ? rawCug.slice(-10) : localPhone;
+        await db
+          .prepare(`
+            INSERT OR REPLACE INTO station_portal_details (
+              station_id, district_id, district_name, station_name,
+              sho_name, sho_designation, sho_cug, landline, sho_email,
+              circle_name, co_name, co_cug, co_email, jurisdiction, address, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `)
+          .bind(
+            stationId,
+            districtId,
+            districtName,
+            stationName,
+            details.shoName || null,
+            details.shoDesignation || 'SHO',
+            validPhone || null,
+            details.landline || null,
+            details.shoEmail || null,
+            details.circleName || null,
+            details.coName || null,
+            details.coCug || null,
+            details.coEmail || null,
+            details.jurisdiction || null,
+            details.address || null,
+            new Date().toISOString()
+          )
+          .run()
+          .catch(() => {});
+
+        if (validPhone && (!localPhone || localPhone !== validPhone)) {
+          await db
+            .prepare(`UPDATE stations_offices SET phone = ?, updated_at = ? WHERE id = ? AND type = 'POLICE_STATION'`)
+            .bind(validPhone, new Date().toISOString(), stationId)
+            .run()
+            .catch(() => {});
+        }
+      }
+
       return c.json({
         success: true,
+        hasData: true,
         isOffice: false,
         stationName,
         districtName,
-        localPhone,
+        localPhone: details.shoCug || localPhone,
         matchedPortalDistrict: match.district.name,
         matchedPortalThana: match.thana.name,
         source: 'UP_POLICE_OFFICIAL_PORTAL',
@@ -592,14 +695,11 @@ export function createExternalPortalRouter(db: D1Database) {
     } catch (err: any) {
       console.error('UP Police Portal fetch error:', err);
       return c.json({
-        success: false,
+        success: true,
+        hasData: false,
         fallback: true,
-        stationName,
-        districtName,
-        localPhone,
-        message: 'उत्तर प्रदेश पुलिस पोर्टल से डेटा लोड करने में विलंब हुआ। डेटाबेस का सत्यापित नंबर उपलब्ध है।',
-        error: err.message || 'पोर्टल से डेटा प्राप्त करने में असमर्थ।',
-      });
+        message: 'उपलब्ध नहीं है',
+      }, 200);
     }
   });
 
@@ -756,49 +856,119 @@ export function createExternalPortalRouter(db: D1Database) {
         }
       }
 
-      // 3. Process matched thanas in parallel (subrequest limit safe: <= 12 subrequests, ~3.5s total duration)
-      const toProcess = matchedItems.slice(0, 10);
-      await Promise.allSettled(
-        toProcess.map(async ({ stn, match }) => {
-          try {
-            const details = await fetchPortalThanaDetails(match.district.code, match.thana.code, 4500);
-            const rawCug = (details.shoCug || '').replace(/[^0-9]/g, '');
-            const validPhone = rawCug.length >= 10 ? rawCug.slice(-10) : (stn.phone || null);
-            const willUpdate = Boolean(validPhone && validPhone !== stn.phone);
+      // 3. Process matched thanas: Check DB cache first for instant resolution!
+      const cachedRows = await db
+        .prepare('SELECT station_id, sho_name, sho_designation, sho_cug, sho_email FROM station_portal_details WHERE district_id = ?')
+        .bind(requestedDistrictId)
+        .all<any>()
+        .catch(() => ({ results: [] }));
 
-            changes.push({
-              stationId: stn.id,
-              name: stn.name,
-              matched: true,
-              matchedPortalDistrict: match.district.name,
-              matchedPortalThana: match.thana.name,
-              shoName: details.shoName || null,
-              shoDesignation: details.shoDesignation || null,
-              shoEmail: details.shoEmail || null,
-              currentPhone: stn.phone || null,
-              newPhone: validPhone,
-              willUpdate,
-            });
-          } catch {
-            changes.push({
-              stationId: stn.id,
-              name: stn.name,
-              matched: true,
-              matchedPortalDistrict: match.district.name,
-              matchedPortalThana: match.thana.name,
-              currentPhone: stn.phone || null,
-              newPhone: null,
-              willUpdate: false,
-              reason: 'पोर्टल विवरण लोड करने में विलंब',
-            });
-          }
-        })
-      );
+      const cachedMap = new Map<string, any>();
+      for (const row of cachedRows.results || []) {
+        if (row.station_id) cachedMap.set(row.station_id, row);
+      }
 
-      // Include remaining matched items (if total stations > 10) as verified matched
-      if (matchedItems.length > toProcess.length) {
-        for (let j = toProcess.length; j < matchedItems.length; j++) {
-          const { stn, match } = matchedItems[j];
+      const uncachedItems: typeof matchedItems = [];
+
+      for (const item of matchedItems) {
+        const cached = cachedMap.get(item.stn.id);
+        if (cached && (cached.sho_name || cached.sho_cug)) {
+          const rawCug = (cached.sho_cug || '').replace(/[^0-9]/g, '');
+          const validPhone = rawCug.length >= 10 ? rawCug.slice(-10) : (item.stn.phone || null);
+          const willUpdate = Boolean(validPhone && validPhone !== item.stn.phone);
+
+          changes.push({
+            stationId: item.stn.id,
+            name: item.stn.name,
+            matched: true,
+            matchedPortalDistrict: item.match.district.name,
+            matchedPortalThana: item.match.thana.name,
+            shoName: cached.sho_name || null,
+            shoDesignation: cached.sho_designation || 'SHO',
+            shoEmail: cached.sho_email || null,
+            currentPhone: item.stn.phone || null,
+            newPhone: validPhone,
+            willUpdate,
+          });
+        } else {
+          uncachedItems.push(item);
+        }
+      }
+
+      // Process up to 8 uncached thanas in parallel
+      const toFetch = uncachedItems.slice(0, 8);
+      if (toFetch.length > 0) {
+        await Promise.allSettled(
+          toFetch.map(async ({ stn, match }) => {
+            try {
+              const details = await fetchPortalThanaDetails(match.district.code, match.thana.code, 12000);
+              const rawCug = (details.shoCug || '').replace(/[^0-9]/g, '');
+              const validPhone = rawCug.length >= 10 ? rawCug.slice(-10) : (stn.phone || null);
+              const willUpdate = Boolean(validPhone && validPhone !== stn.phone);
+
+              await db
+                .prepare(`
+                  INSERT OR REPLACE INTO station_portal_details (
+                    station_id, district_id, district_name, station_name,
+                    sho_name, sho_designation, sho_cug, landline, sho_email,
+                    circle_name, co_name, co_cug, co_email, jurisdiction, address, updated_at
+                  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                `)
+                .bind(
+                  stn.id,
+                  requestedDistrictId,
+                  district.name,
+                  stn.name,
+                  details.shoName || null,
+                  details.shoDesignation || 'SHO',
+                  validPhone || null,
+                  details.landline || null,
+                  details.shoEmail || null,
+                  details.circleName || null,
+                  details.coName || null,
+                  details.coCug || null,
+                  details.coEmail || null,
+                  details.jurisdiction || null,
+                  details.address || null,
+                  new Date().toISOString()
+                )
+                .run()
+                .catch(() => {});
+
+              changes.push({
+                stationId: stn.id,
+                name: stn.name,
+                matched: true,
+                matchedPortalDistrict: match.district.name,
+                matchedPortalThana: match.thana.name,
+                shoName: details.shoName || null,
+                shoDesignation: details.shoDesignation || null,
+                shoEmail: details.shoEmail || null,
+                currentPhone: stn.phone || null,
+                newPhone: validPhone,
+                willUpdate,
+              });
+            } catch {
+              changes.push({
+                stationId: stn.id,
+                name: stn.name,
+                matched: true,
+                matchedPortalDistrict: match.district.name,
+                matchedPortalThana: match.thana.name,
+                currentPhone: stn.phone || null,
+                newPhone: null,
+                willUpdate: false,
+                reason: 'पोर्टल विवरण लोड करने में विलंब',
+              });
+            }
+          })
+        );
+      }
+
+      // Include remaining uncached items (if any) as verified matched
+      if (uncachedItems.length > toFetch.length) {
+        for (let j = toFetch.length; j < uncachedItems.length; j++) {
+          const { stn, match } = uncachedItems[j];
           changes.push({
             stationId: stn.id,
             name: stn.name,
@@ -868,4 +1038,116 @@ export function createExternalPortalRouter(db: D1Database) {
   });
 
   return router;
+}
+
+// Daily automatic background sync: picks districts that need caching or refresh
+export async function runAutomaticDailySync(db: D1Database): Promise<void> {
+  try {
+    await ensurePortalTable(db);
+    // Find a district with uncached police stations
+    const target = await db
+      .prepare(`
+        SELECT s.district_id, d.name as district_name, COUNT(s.id) as uncached_count
+        FROM stations_offices s
+        JOIN districts d ON s.district_id = d.id
+        LEFT JOIN station_portal_details sp ON sp.station_id = s.id
+        WHERE s.type = 'POLICE_STATION' AND s.is_active = 1 AND sp.station_id IS NULL
+        GROUP BY s.district_id
+        ORDER BY uncached_count DESC
+        LIMIT 1
+      `)
+      .first<any>();
+
+    let distId = target?.district_id;
+    let distName = target?.district_name;
+
+    if (!distId) {
+      // All cached: find district with oldest update
+      const oldest = await db
+        .prepare(`
+          SELECT sp.district_id, sp.district_name, MIN(sp.updated_at) as oldest_date
+          FROM station_portal_details sp
+          GROUP BY sp.district_id
+          ORDER BY oldest_date ASC
+          LIMIT 1
+        `)
+        .first<any>();
+      if (!oldest) return;
+      distId = oldest.district_id;
+      distName = oldest.district_name;
+    }
+
+    const candidates = await findPortalDistrictCandidates(distId, distName);
+    if (candidates.length === 0) return;
+
+    const allCandidateThanas: { district: PortalDistrictItem; thana: PortalThanaItem }[] = [];
+    for (const dist of candidates) {
+      try {
+        const thanas = await fetchPortalThanas(dist.code);
+        for (const t of thanas) allCandidateThanas.push({ district: dist, thana: t });
+      } catch (e) {
+        console.warn('Daily sync thana fetch error:', e);
+      }
+    }
+
+    const stationsResult = await db
+      .prepare(`SELECT id, name, phone FROM stations_offices WHERE district_id = ? AND type = 'POLICE_STATION' AND is_active = 1`)
+      .bind(distId)
+      .all<any>();
+
+    const stations = stationsResult.results || [];
+    const matched: { stn: any; match: any }[] = [];
+
+    for (const stn of stations) {
+      const cleanStn = cleanName(stn.name);
+      let m = allCandidateThanas.find(item => cleanName(item.thana.name) === cleanStn);
+      if (!m) {
+        m = allCandidateThanas.find(item => {
+          const cleanT = cleanName(item.thana.name);
+          return cleanT.length >= 4 && (cleanT.includes(cleanStn) || cleanStn.includes(cleanT));
+        });
+      }
+      if (m) matched.push({ stn, match: m });
+    }
+
+    // Process up to 8 matched in background
+    const batch = matched.slice(0, 8);
+    for (const { stn, match } of batch) {
+      try {
+        const details = await fetchPortalThanaDetails(match.district.code, match.thana.code, 4000);
+        const rawCug = (details.shoCug || '').replace(/[^0-9]/g, '');
+        const validPhone = rawCug.length >= 10 ? rawCug.slice(-10) : stn.phone;
+
+        await db
+          .prepare(`
+            INSERT OR REPLACE INTO station_portal_details (
+              station_id, district_id, district_name, station_name,
+              sho_name, sho_designation, sho_cug, landline, sho_email,
+              circle_name, co_name, co_cug, co_email, jurisdiction, address, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `)
+          .bind(
+            stn.id, distId, distName, stn.name,
+            details.shoName || null, details.shoDesignation || 'SHO', validPhone || null,
+            details.landline || null, details.shoEmail || null,
+            details.circleName || null, details.coName || null, details.coCug || null, details.coEmail || null,
+            details.jurisdiction || null, details.address || null, new Date().toISOString()
+          )
+          .run()
+          .catch(() => {});
+
+        if (validPhone && validPhone !== stn.phone) {
+          await db
+            .prepare(`UPDATE stations_offices SET phone = ?, updated_at = ? WHERE id = ?`)
+            .bind(validPhone, new Date().toISOString(), stn.id)
+            .run()
+            .catch(() => {});
+        }
+      } catch (err) {
+        console.warn(`runAutomaticDailySync item failed:`, err);
+      }
+    }
+  } catch (err) {
+    console.error('runAutomaticDailySync error:', err);
+  }
 }

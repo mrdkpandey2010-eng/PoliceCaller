@@ -2132,7 +2132,7 @@ export const AdminDashboard: React.FC = () => {
                 <option value="">Select District...</option>
                 {allDistricts.map((d) => (
                   <option key={d.id} value={d.id}>
-                    {d.name} ({d.stateCode})
+                    {d.name}{d.code ? ` (${d.code})` : ''}
                   </option>
                 ))}
               </select>
@@ -2200,7 +2200,7 @@ export const AdminDashboard: React.FC = () => {
         footer={
           <div className="flex items-center justify-between w-full flex-wrap gap-2">
             <span className="text-[11px] text-slate-400">
-              आधिकारिक स्रोत: Know Your Police Station (uppolice.gov.in)
+              आधिकारिक स्रोत: Official Portal Data Sync
             </span>
             <div className="flex items-center gap-2">
               <Button
@@ -2264,7 +2264,7 @@ export const AdminDashboard: React.FC = () => {
                   <option value="">जनपद चुनें...</option>
                   {allDistricts.map((d) => (
                     <option key={d.id} value={d.id}>
-                      {d.name}{d.stateCode ? ` (${d.stateCode})` : ''}
+                      {d.name}{d.code ? ` (${d.code})` : ''}
                     </option>
                   ))}
                 </select>
