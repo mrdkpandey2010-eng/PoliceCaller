@@ -185,4 +185,113 @@ describe('Departmental Notices & Read Receipts Suite', () => {
     expect(reportData.report.totalRead).toBe(1);
     expect(reportData.report.totalAcknowledged).toBe(1);
   });
+
+  it('allows notice issuer to edit notice, but forbids unauthorized users', async () => {
+    // 1. Co-Admin publishes notice for dist_lucknow
+    const pubRes = await app.request('/api/notices', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${lkoCoAdminToken}`,
+      },
+      body: JSON.stringify({
+        title: 'Original Notice Title',
+        body: 'Original Notice Body',
+        urgency: 'NORMAL',
+        targetScope: 'DISTRICT',
+        targetDistrictId: 'dist_lucknow',
+      }),
+    });
+    const { noticeId } = await pubRes.json();
+
+    // 2. Regular user tries to edit -> 403 Forbidden
+    const unauthEditRes = await app.request(`/api/notices/${noticeId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${userLkoToken}`,
+      },
+      body: JSON.stringify({
+        title: 'Malicious Title Edit',
+        body: 'Hacked content',
+      }),
+    });
+    expect(unauthEditRes.status).toBe(403);
+
+    // 3. Issuer (Co-Admin) edits notice -> 200 OK
+    const editRes = await app.request(`/api/notices/${noticeId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${lkoCoAdminToken}`,
+      },
+      body: JSON.stringify({
+        title: 'Updated Notice Title By Issuer',
+        body: 'Updated Notice Body with critical guidelines.',
+        urgency: 'CRITICAL',
+      }),
+    });
+    expect(editRes.status).toBe(200);
+    const editData = await editRes.json();
+    expect(editData.success).toBe(true);
+
+    // 4. Verify notice in database has updated values
+    const checkRes = await app.request('/api/notices', {
+      headers: { Authorization: `Bearer ${userLkoToken}` },
+    });
+    const { notices } = await checkRes.json();
+    const updated = notices.find((n: any) => n.id === noticeId);
+    expect(updated).toBeDefined();
+    expect(updated.title).toBe('Updated Notice Title By Issuer');
+    expect(updated.urgency).toBe('CRITICAL');
+  });
+
+  it('allows notice issuer to delete notice from database, cascades recipients, and forbids unauthorized deletion', async () => {
+    // 1. Co-Admin publishes notice
+    const pubRes = await app.request('/api/notices', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${lkoCoAdminToken}`,
+      },
+      body: JSON.stringify({
+        title: 'Temporary Flash Order to be deleted',
+        body: 'This will be deleted soon.',
+        urgency: 'URGENT',
+        targetScope: 'DISTRICT',
+        targetDistrictId: 'dist_lucknow',
+      }),
+    });
+    const { noticeId } = await pubRes.json();
+
+    // 2. User marks it read
+    await app.request(`/api/notices/${noticeId}/read`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${userLkoToken}` },
+    });
+
+    // 3. Unauthorized user tries to delete -> 403 Forbidden
+    const unauthDelRes = await app.request(`/api/notices/${noticeId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${userLkoToken}` },
+    });
+    expect(unauthDelRes.status).toBe(403);
+
+    // 4. Issuer deletes notice -> 200 OK
+    const delRes = await app.request(`/api/notices/${noticeId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${lkoCoAdminToken}` },
+    });
+    expect(delRes.status).toBe(200);
+    const delData = await delRes.json();
+    expect(delData.success).toBe(true);
+
+    // 5. Verify notice no longer exists in database
+    const verifyNotice = await db.prepare('SELECT * FROM notices WHERE id = ?').bind(noticeId).first();
+    expect(verifyNotice).toBeNull();
+
+    // 6. Verify notice receipts are also deleted
+    const verifyReceipts = await db.prepare('SELECT * FROM notice_recipients WHERE notice_id = ?').bind(noticeId).all();
+    expect(verifyReceipts.results.length).toBe(0);
+  });
 });

@@ -224,5 +224,139 @@ export function createNoticesRouter(db: D1Database) {
     });
   });
 
+  // PUT & PATCH /api/notices/:noticeId - Edit notice/order (Issuer, Super Admin, or District Co-Admin)
+  const handleUpdateNotice = async (c: any) => {
+    const user = c.get('user');
+    if (!user) return c.json({ error: 'Unauthorized' }, 401);
+
+    const noticeId = c.req.param('noticeId');
+    const notice = await db
+      .prepare('SELECT * FROM notices WHERE id = ?')
+      .bind(noticeId)
+      .first<any>();
+
+    if (!notice) {
+      return c.json({ error: 'Notice not found.' }, 404);
+    }
+
+    const isIssuer = notice.published_by === user.id;
+    const isSuperAdmin = user.role === ROLES.SUPER_ADMIN;
+    const isDistrictCoAdmin =
+      user.role === ROLES.DISTRICT_CO_ADMIN &&
+      String(notice.target_district_id || '').trim().toLowerCase() === String(user.districtId || '').trim().toLowerCase();
+
+    if (!isIssuer && !isSuperAdmin && !isDistrictCoAdmin) {
+      return c.json({ error: 'Forbidden: Only the issuer or authorized administrator may edit this notice.' }, 403);
+    }
+
+    try {
+      const body = await c.req.json();
+      const { title, body: content, urgency, targetScope, targetDistrictId } = body;
+
+      if (!title || !title.trim()) {
+        return c.json({ error: 'Title is required.' }, 400);
+      }
+      if (!content || !content.trim()) {
+        return c.json({ error: 'Body is required.' }, 400);
+      }
+
+      const validUrgency = ['NORMAL', 'URGENT', 'CRITICAL'].includes(urgency) ? urgency : notice.urgency;
+      const finalScope = isSuperAdmin ? (targetScope || notice.target_scope) : 'DISTRICT';
+      const finalDistrict = isSuperAdmin ? (targetDistrictId ?? notice.target_district_id) : user.districtId;
+      const now = new Date().toISOString();
+
+      await db
+        .prepare(
+          `UPDATE notices
+           SET title = ?, body = ?, urgency = ?, target_scope = ?, target_district_id = ?, updated_at = ?
+           WHERE id = ?`
+        )
+        .bind(
+          title.trim(),
+          content.trim(),
+          validUrgency,
+          finalScope,
+          finalDistrict || null,
+          now,
+          noticeId
+        )
+        .run();
+
+      await logAuditEvent(db, {
+        actor: user,
+        action: 'UPDATE_NOTICE',
+        entityType: 'NOTICE',
+        entityId: noticeId,
+        districtScope: finalDistrict || 'STATEWIDE',
+        beforeState: { title: notice.title, urgency: notice.urgency, body: notice.body },
+        afterState: { title: title.trim(), urgency: validUrgency, body: content.trim() },
+      });
+
+      return c.json({
+        success: true,
+        message: 'Departmental notice updated successfully.',
+        noticeId,
+      });
+    } catch (err: any) {
+      return c.json({ error: err.message || 'Failed to update notice' }, 400);
+    }
+  };
+
+  router.put('/:noticeId', handleUpdateNotice);
+  router.patch('/:noticeId', handleUpdateNotice);
+
+  // DELETE /api/notices/:noticeId - Delete notice from database (Issuer, Super Admin, or District Co-Admin)
+  router.delete('/:noticeId', async (c) => {
+    const user = c.get('user');
+    if (!user) return c.json({ error: 'Unauthorized' }, 401);
+
+    const noticeId = c.req.param('noticeId');
+    const notice = await db
+      .prepare('SELECT * FROM notices WHERE id = ?')
+      .bind(noticeId)
+      .first<any>();
+
+    if (!notice) {
+      return c.json({ error: 'Notice not found.' }, 404);
+    }
+
+    const isIssuer = notice.published_by === user.id;
+    const isSuperAdmin = user.role === ROLES.SUPER_ADMIN;
+    const isDistrictCoAdmin =
+      user.role === ROLES.DISTRICT_CO_ADMIN &&
+      String(notice.target_district_id || '').trim().toLowerCase() === String(user.districtId || '').trim().toLowerCase();
+
+    if (!isIssuer && !isSuperAdmin && !isDistrictCoAdmin) {
+      return c.json({ error: 'Forbidden: Only the issuer or authorized administrator may delete this notice.' }, 403);
+    }
+
+    // 1. Delete associated receipts from notice_recipients
+    await db
+      .prepare('DELETE FROM notice_recipients WHERE notice_id = ?')
+      .bind(noticeId)
+      .run();
+
+    // 2. Delete notice record from notices table
+    await db
+      .prepare('DELETE FROM notices WHERE id = ?')
+      .bind(noticeId)
+      .run();
+
+    await logAuditEvent(db, {
+      actor: user,
+      action: 'DELETE_NOTICE',
+      entityType: 'NOTICE',
+      entityId: noticeId,
+      districtScope: notice.target_district_id || 'STATEWIDE',
+      beforeState: { title: notice.title, publisher: notice.published_by },
+    });
+
+    return c.json({
+      success: true,
+      message: 'Notice and order permanently deleted from database.',
+      noticeId,
+    });
+  });
+
   return router;
 }

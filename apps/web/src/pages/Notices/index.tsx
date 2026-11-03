@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Badge, Button, Modal, Input } from '@police-directory/ui';
-import { Bell, AlertTriangle, CheckCircle, Plus, Eye, Check } from 'lucide-react';
+import { Bell, AlertTriangle, CheckCircle, Plus, Eye, Check, Edit2, Trash2 } from 'lucide-react';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
@@ -19,6 +19,16 @@ export const Notices: React.FC = () => {
     urgency: 'NORMAL',
     targetScope: user?.role === ROLES.SUPER_ADMIN ? 'STATEWIDE' : 'DISTRICT',
   });
+
+  // Edit & Delete Notice state
+  const [editingNotice, setEditingNotice] = useState<any | null>(null);
+  const [editData, setEditData] = useState({
+    title: '',
+    body: '',
+    urgency: 'NORMAL',
+  });
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const fetchNotices = async () => {
     setLoading(true);
@@ -78,6 +88,69 @@ export const Notices: React.FC = () => {
     }
   };
 
+  const handleOpenEditModal = (notice: any) => {
+    setEditingNotice(notice);
+    setEditData({
+      title: notice.title || '',
+      body: notice.body || '',
+      urgency: notice.urgency || 'NORMAL',
+    });
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingNotice) return;
+    if (!editData.title.trim() || !editData.body.trim()) {
+      alert(language === 'hi' ? 'कृपया आदेश का विषय और विवरण भरें।' : 'Please enter title and body.');
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      await api.updateNotice(editingNotice.id, {
+        title: editData.title.trim(),
+        body: editData.body.trim(),
+        urgency: editData.urgency,
+      });
+      setNotices((prev) =>
+        prev.map((n) =>
+          n.id === editingNotice.id
+            ? {
+                ...n,
+                title: editData.title.trim(),
+                body: editData.body.trim(),
+                urgency: editData.urgency,
+              }
+            : n
+        )
+      );
+      setEditingNotice(null);
+      alert(language === 'hi' ? 'आदेश/सूचना सफलतापूर्वक अपडेट हो गई।' : 'Notice updated successfully.');
+    } catch (err: any) {
+      alert(err.message || 'Failed to update notice');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const handleDeleteNotice = async (noticeId: string) => {
+    const confirmMsg =
+      language === 'hi'
+        ? 'क्या आप वाकई इस आदेश/सूचना को डेटाबेस से स्थायी रूप से हटाना चाहते हैं?'
+        : 'Are you sure you want to permanently delete this notice from the database?';
+    if (!window.confirm(confirmMsg)) return;
+
+    setDeletingId(noticeId);
+    try {
+      await api.deleteNotice(noticeId);
+      setNotices((prev) => prev.filter((n) => n.id !== noticeId));
+      alert(language === 'hi' ? 'आदेश/सूचना डेटाबेस से सफलतापूर्वक हटा दी गई।' : 'Notice deleted successfully from database.');
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete notice');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   const canPublish = user?.role === ROLES.SUPER_ADMIN || user?.role === ROLES.DISTRICT_CO_ADMIN;
 
   return (
@@ -132,6 +205,13 @@ export const Notices: React.FC = () => {
                 ? 'warning'
                 : 'primary';
 
+            const isIssuer = n.published_by === user?.id;
+            const isSuperAdmin = user?.role === ROLES.SUPER_ADMIN;
+            const isDistrictCoAdmin =
+              user?.role === ROLES.DISTRICT_CO_ADMIN &&
+              String(n.target_district_id || '').trim().toLowerCase() === String(user?.districtId || '').trim().toLowerCase();
+            const canManageNotice = isIssuer || isSuperAdmin || isDistrictCoAdmin;
+
             return (
               <Card
                 key={n.id}
@@ -171,30 +251,58 @@ export const Notices: React.FC = () => {
                   {n.body}
                 </p>
 
-                <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800 text-xs">
+                <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800 text-xs flex-wrap gap-2">
                   <span className="text-[11px] text-slate-500">
                     Issued by: <strong className="text-slate-700 dark:text-slate-300">{n.publisherName} ({n.publisherRank})</strong>
                   </span>
 
-                  {n.isAcknowledged ? (
-                    <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-bold text-xs">
-                      <Check className="w-4 h-4" /> Formally Acknowledged
-                    </span>
-                  ) : (
-                    <Button
-                      variant="teal"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleAcknowledge(n.id);
-                      }}
-                      aria-label="Formally acknowledge departmental order"
-                      icon={<CheckCircle className="w-3.5 h-3.5" />}
-                      className="text-xs px-3 py-1 font-bold rounded-lg"
-                    >
-                      {language === 'hi' ? 'आदेश पावती दें' : 'Acknowledge Receipt'}
-                    </Button>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {/* Issuer / Admin Actions: Edit & Delete */}
+                    {canManageNotice && (
+                      <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditModal(n)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-teal-500/40 text-teal-700 dark:text-teal-300 bg-teal-50/80 dark:bg-teal-950/40 hover:bg-teal-100 dark:hover:bg-teal-900/60 font-bold text-xs transition shadow-xs"
+                          title={language === 'hi' ? 'आदेश संपादित करें' : 'Edit Notice'}
+                        >
+                          <Edit2 className="w-3 h-3" />
+                          <span>{language === 'hi' ? 'संपादित करें' : 'Edit'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteNotice(n.id)}
+                          disabled={deletingId === n.id}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-red-500/40 text-red-600 dark:text-red-400 bg-red-50/80 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-900/60 font-bold text-xs transition shadow-xs disabled:opacity-50"
+                          title={language === 'hi' ? 'डेटाबेस से हटाएं' : 'Delete from Database'}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          <span>{deletingId === n.id ? (language === 'hi' ? 'हटा रहे...' : 'Deleting...') : (language === 'hi' ? 'हटाएं' : 'Delete')}</span>
+                        </button>
+                      </div>
+                    )}
+
+                    {n.isAcknowledged ? (
+                      <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-bold text-xs">
+                        <Check className="w-4 h-4" /> Formally Acknowledged
+                      </span>
+                    ) : (
+                      <Button
+                        variant="teal"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleAcknowledge(n.id);
+                        }}
+                        aria-label="Formally acknowledge departmental order"
+                        icon={<CheckCircle className="w-3.5 h-3.5" />}
+                        className="text-xs px-3 py-1 font-bold rounded-lg"
+                      >
+                        {language === 'hi' ? 'आदेश पावती दें' : 'Acknowledge Receipt'}
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </Card>
             );
@@ -266,6 +374,74 @@ export const Notices: React.FC = () => {
             />
           </div>
         </div>
+      </Modal>
+
+      {/* Edit Notice / Order Modal */}
+      <Modal
+        isOpen={Boolean(editingNotice)}
+        onClose={() => setEditingNotice(null)}
+        title={language === 'hi' ? 'विभागीय आदेश संपादित करें' : 'Edit Departmental Notice / Order'}
+        maxWidth="md"
+        footer={
+          <div className="flex items-center justify-end gap-2 w-full">
+            <Button
+              variant="ghost"
+              onClick={() => setEditingNotice(null)}
+              disabled={savingEdit}
+              aria-label="Cancel notice editing"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleSaveEdit}
+              disabled={savingEdit}
+              aria-label="Save notice changes"
+              className="bg-[#17324F] font-bold"
+            >
+              {savingEdit ? (language === 'hi' ? 'अपडेट हो रहा है...' : 'Saving...') : (language === 'hi' ? 'आदेश अपडेट करें' : 'Save Changes')}
+            </Button>
+          </div>
+        }
+      >
+        <form onSubmit={handleSaveEdit} className="space-y-3">
+          <Input
+            label={language === 'hi' ? 'आदेश / सूचना का विषय *' : 'Notice / Order Subject *'}
+            value={editData.title}
+            onChange={(e) => setEditData({ ...editData, title: e.target.value })}
+            placeholder="e.g. VIP Route Security Protocol"
+            required
+          />
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              {language === 'hi' ? 'प्राथमिकता स्तर (Urgency)' : 'Urgency Level'}
+            </label>
+            <select
+              value={editData.urgency}
+              onChange={(e) => setEditData({ ...editData, urgency: e.target.value })}
+              className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium"
+            >
+              <option value="NORMAL">NORMAL</option>
+              <option value="URGENT">URGENT</option>
+              <option value="CRITICAL">CRITICAL</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              {language === 'hi' ? 'आदेश का पूरा विवरण *' : 'Full Order Content *'}
+            </label>
+            <textarea
+              rows={5}
+              value={editData.body}
+              onChange={(e) => setEditData({ ...editData, body: e.target.value })}
+              placeholder="Enter comprehensive instructions, duty guidelines, and order references..."
+              className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs sm:text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#17324F]"
+              required
+            />
+          </div>
+        </form>
       </Modal>
     </div>
   );

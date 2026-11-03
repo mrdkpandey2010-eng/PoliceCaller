@@ -154,6 +154,12 @@ export const api = {
 
   getNoticeReport: (noticeId: string) => request(`/notices/${noticeId}/report`),
 
+  updateNotice: (noticeId: string, data: any) =>
+    request(`/notices/${noticeId}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  deleteNotice: (noticeId: string) =>
+    request(`/notices/${noticeId}`, { method: 'DELETE' }),
+
   // Transfers
   getTransfers: (params?: { status?: string }) => {
     const qs = params?.status ? `?status=${encodeURIComponent(params.status)}` : '';
