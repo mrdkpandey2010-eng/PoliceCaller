@@ -329,4 +329,11 @@ export const api = {
 
   updateFeedbackStatus: (id: string, payload: { status: string; adminNotes?: string }) =>
     request(`/feedback/${id}/status`, { method: 'PATCH', body: JSON.stringify(payload) }),
+
+  // UP Police Official Portal Hybrid Integration
+  getLiveThanaDetails: (stationId: string) =>
+    request(`/external/uppolice/thana-details?stationId=${encodeURIComponent(stationId)}`),
+
+  syncDistrictFromPortal: (payload: { districtId: string; dryRun?: boolean }) =>
+    request('/external/uppolice/sync-district', { method: 'POST', body: JSON.stringify(payload) }),
 };

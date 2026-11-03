@@ -12,6 +12,7 @@ import { createExcelRouter } from './routes/excel';
 import { createMastersRouter } from './routes/masters';
 import { createDiariesRouter } from './routes/diaries';
 import { createFeedbackRouter } from './routes/feedback';
+import { createExternalPortalRouter } from './routes/external-portal';
 
 export interface Env {
   DB: D1Database;
@@ -140,6 +141,7 @@ export function createApp(dbInstance?: D1Database) {
   app.route('/api/masters', createMastersRouter(targetDb));
   app.route('/api/diaries', createDiariesRouter(targetDb));
   app.route('/api/feedback', createFeedbackRouter(targetDb));
+  app.route('/api/external/uppolice', createExternalPortalRouter(targetDb));
 
   return app;
 }

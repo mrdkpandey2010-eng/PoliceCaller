@@ -25,6 +25,9 @@ import {
   Phone,
   Plus,
   MapPin,
+  Globe,
+  RefreshCw,
+  AlertCircle,
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -66,6 +69,14 @@ export const AdminDashboard: React.FC = () => {
   const [newOfficeDistrictId, setNewOfficeDistrictId] = useState('');
   const [addingOffice, setAddingOffice] = useState(false);
   const [allDistricts, setAllDistricts] = useState<any[]>([]);
+
+  // UP Police Official Portal Sync State
+  const [portalSyncModalOpen, setPortalSyncModalOpen] = useState(false);
+  const [portalSyncDistrictId, setPortalSyncDistrictId] = useState('');
+  const [portalSyncLoading, setPortalSyncLoading] = useState(false);
+  const [portalSyncApplying, setPortalSyncApplying] = useState(false);
+  const [portalSyncResult, setPortalSyncResult] = useState<any | null>(null);
+  const [portalSyncError, setPortalSyncError] = useState<string | null>(null);
 
   // Super Admin Control: Co-Admin Excel Bulk Import toggle (Requirement 5)
   const [coAdminExcelEnabled, setCoAdminExcelEnabled] = useState<boolean>(true);
@@ -247,6 +258,57 @@ export const AdminDashboard: React.FC = () => {
       alert(err.message || 'Failed to create office');
     } finally {
       setAddingOffice(false);
+    }
+  };
+
+  const handleOpenPortalSync = () => {
+    const defaultDist = isSuperAdmin ? (user?.districtId || (allDistricts[0]?.id || '')) : (user?.districtId || '');
+    setPortalSyncDistrictId(defaultDist);
+    setPortalSyncResult(null);
+    setPortalSyncError(null);
+    setPortalSyncModalOpen(true);
+    if (defaultDist) {
+      handleRunPortalPreview(defaultDist);
+    }
+  };
+
+  const handleRunPortalPreview = async (distIdOverride?: string) => {
+    const distId = distIdOverride || portalSyncDistrictId || user?.districtId;
+    if (!distId) return;
+    setPortalSyncLoading(true);
+    setPortalSyncError(null);
+    try {
+      const res: any = await api.syncDistrictFromPortal({ districtId: distId, dryRun: true });
+      if (res.success) {
+        setPortalSyncResult(res);
+      } else {
+        setPortalSyncError(res.error || 'पोर्टल से सिंक पूर्वावलोकन प्राप्त करने में त्रुटि हुई।');
+      }
+    } catch (err: any) {
+      setPortalSyncError(err.message || 'UP Police पोर्टल से कनेक्ट नहीं हो सका।');
+    } finally {
+      setPortalSyncLoading(false);
+    }
+  };
+
+  const handleApplyPortalSync = async () => {
+    const distId = portalSyncDistrictId || user?.districtId;
+    if (!distId) return;
+    setPortalSyncApplying(true);
+    setPortalSyncError(null);
+    try {
+      const res: any = await api.syncDistrictFromPortal({ districtId: distId, dryRun: false });
+      if (res.success) {
+        setPortalSyncResult(res);
+        alert(`सफलतापूर्वक ${res.updatedCount || 0} थानों के CUG नंबर डेटाबेस में अपडेट किए गए।`);
+        loadTabContent('stations');
+      } else {
+        setPortalSyncError(res.error || 'पोर्टल CUG नंबर अपडेट करने में त्रुटि हुई।');
+      }
+    } catch (err: any) {
+      setPortalSyncError(err.message || 'नंबर अपडेट करने में त्रुटि हुई।');
+    } finally {
+      setPortalSyncApplying(false);
     }
   };
 
@@ -1127,23 +1189,35 @@ export const AdminDashboard: React.FC = () => {
                   : `District Administration: Manage contact numbers for Thanas and departmental offices in ${user?.districtName || 'your district'}, or establish new departmental offices.`}
               </p>
             </div>
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => {
-                setNewOfficeName('');
-                setNewOfficePhone('');
-                setNewOfficeAddress('');
-                setNewOfficeType('CIRCLE_OFFICE');
-                setNewOfficeDistrictId(user?.districtId || '');
-                setAddOfficeModalOpen(true);
-              }}
-              aria-label="Add new office"
-              className="bg-[#17324F] text-xs font-bold shadow-sm flex items-center gap-1.5"
-            >
-              <Plus className="w-4 h-4" />
-              Add New Office (नया कार्यालय जोड़ें)
-            </Button>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleOpenPortalSync}
+                aria-label="Sync with UP Police Portal"
+                className="border-[#147D84] text-[#147D84] hover:bg-teal-50 dark:hover:bg-teal-950/40 text-xs font-bold shadow-xs flex items-center gap-1.5"
+              >
+                <Globe className="w-4 h-4 text-[#147D84]" />
+                UP Police पोर्टल से सिंक
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => {
+                  setNewOfficeName('');
+                  setNewOfficePhone('');
+                  setNewOfficeAddress('');
+                  setNewOfficeType('CIRCLE_OFFICE');
+                  setNewOfficeDistrictId(user?.districtId || '');
+                  setAddOfficeModalOpen(true);
+                }}
+                aria-label="Add new office"
+                className="bg-[#17324F] text-xs font-bold shadow-sm flex items-center gap-1.5"
+              >
+                <Plus className="w-4 h-4" />
+                Add New Office (नया कार्यालय जोड़ें)
+              </Button>
+            </div>
           </div>
 
           {/* Search bar & count */}
@@ -2116,6 +2190,208 @@ export const AdminDashboard: React.FC = () => {
             />
           </div>
         </form>
+      </Modal>
+
+      {/* UP Police Official Portal CUG Sync Modal */}
+      <Modal
+        isOpen={portalSyncModalOpen}
+        onClose={() => {
+          if (!portalSyncApplying && !portalSyncLoading) setPortalSyncModalOpen(false);
+        }}
+        title="UP Police Official Portal CUG Sync (पोर्टल से थानों के CUG नंबर सिंक)"
+        maxWidth="lg"
+        footer={
+          <div className="flex items-center justify-between w-full flex-wrap gap-2">
+            <span className="text-[11px] text-slate-400">
+              आधिकारिक स्रोत: Know Your Police Station (uppolice.gov.in)
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                onClick={() => setPortalSyncModalOpen(false)}
+                disabled={portalSyncApplying || portalSyncLoading}
+                aria-label="Close portal sync modal"
+              >
+                बंद करें
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleApplyPortalSync}
+                disabled={
+                  portalSyncApplying ||
+                  portalSyncLoading ||
+                  !portalSyncResult ||
+                  !portalSyncResult.changes?.some((c: any) => c.willUpdate)
+                }
+                aria-label="Apply portal CUG updates to database"
+                className="bg-emerald-600 hover:bg-emerald-700 font-bold text-xs"
+              >
+                {portalSyncApplying ? 'डेटाबेस में अपडेट हो रहा है...' : 'डेटाबेस में नंबर अपडेट करें (Confirm & Update)'}
+              </Button>
+            </div>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <div className="p-3.5 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/60 rounded-xl text-xs text-blue-900 dark:text-blue-200 space-y-1">
+            <p className="font-bold flex items-center gap-1.5">
+              <Globe className="w-4 h-4 text-[#147D84]" />
+              हाइब्रिड ऑटोमेशन नीति (Hybrid Sync Policy)
+            </p>
+            <p className="text-[11px] text-blue-800 dark:text-blue-300">
+              यह टूल उत्तर प्रदेश पुलिस के मुख्य पोर्टल से आपके जनपद के थानों के आधिकारिक SHO CUG मोबाइल नंबरों का मिलान करता है।
+            </p>
+            <p className="text-[10px] text-blue-700 dark:text-blue-400 pt-0.5">
+              • <strong>सुरक्षित कार्यप्रणाली:</strong> केवल सक्रिय थानों (POLICE_STATION) के फोन नंबर अपडेट होंगे।<br />
+              • <strong>कार्यालय सुरक्षित:</strong> किसी भी कार्यालय (Offices) के डेटा में कोई बदलाव नहीं होगा।<br />
+              • <strong>कोई डुप्लीकेट नहीं:</strong> डेटाबेस में नया थाना नहीं जुड़ेगा, केवल मौजूदा सत्यापित थानों का नंबर अपडेट होगा।
+            </p>
+          </div>
+
+          {/* District selector (Super Admin) or District name (Co-Admin) */}
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            {isSuperAdmin ? (
+              <div className="flex-1 min-w-[200px]">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  जनपद चुनें (Select District) *
+                </label>
+                <select
+                  value={portalSyncDistrictId}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setPortalSyncDistrictId(val);
+                    if (val) handleRunPortalPreview(val);
+                  }}
+                  className="w-full min-h-[40px] px-3 py-2 rounded-xl border text-xs bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#147D84]"
+                >
+                  <option value="">जनपद चुनें...</option>
+                  {allDistricts.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name} ({d.stateCode})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div>
+                <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                  प्रशासित जनपद: <span className="text-[#147D84]">{user?.districtName || 'आपका जनपद'}</span>
+                </p>
+              </div>
+            )}
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleRunPortalPreview()}
+              disabled={portalSyncLoading || portalSyncApplying || !portalSyncDistrictId}
+              aria-label="Refresh portal preview"
+              className="text-xs font-bold border-slate-300 dark:border-slate-700 flex items-center gap-1.5"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${portalSyncLoading ? 'animate-spin' : ''}`} />
+              {portalSyncLoading ? 'पोर्टल से जांच जारी...' : 'जाँचें (Refresh Preview)'}
+            </Button>
+          </div>
+
+          {/* Error Message */}
+          {portalSyncError && (
+            <div className="p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/60 rounded-xl text-xs text-red-700 dark:text-red-300 flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>{portalSyncError}</span>
+            </div>
+          )}
+
+          {/* Loading state */}
+          {portalSyncLoading && (
+            <div className="py-8 text-center space-y-2">
+              <span className="w-6 h-6 border-2 border-[#147D84] border-t-transparent rounded-full animate-spin inline-block" />
+              <p className="text-xs text-slate-600 dark:text-slate-400">
+                UP Police पोर्टल से थानों की लाइव सूची व CUG नंबर प्राप्त किए जा रहे हैं...
+              </p>
+            </div>
+          )}
+
+          {/* Preview Results */}
+          {!portalSyncLoading && portalSyncResult && (
+            <div className="space-y-3">
+              {/* Summary Stats */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 text-center">
+                  <p className="text-[10px] text-slate-500 uppercase font-semibold">कुल थाने</p>
+                  <p className="text-sm font-bold text-slate-800 dark:text-slate-100 mt-0.5">
+                    {portalSyncResult.totalStations || 0}
+                  </p>
+                </div>
+                <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-center">
+                  <p className="text-[10px] text-emerald-700 dark:text-emerald-300 uppercase font-semibold">मैच हुए थाने</p>
+                  <p className="text-sm font-bold text-emerald-800 dark:text-emerald-200 mt-0.5">
+                    {portalSyncResult.matchedCount || 0}
+                  </p>
+                </div>
+                <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-center">
+                  <p className="text-[10px] text-amber-700 dark:text-amber-300 uppercase font-semibold">अपडेट योग्य नंबर</p>
+                  <p className="text-sm font-bold text-amber-800 dark:text-amber-200 mt-0.5">
+                    {portalSyncResult.changes?.filter((c: any) => c.willUpdate).length || 0}
+                  </p>
+                </div>
+                <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 text-center">
+                  <p className="text-[10px] text-slate-500 uppercase font-semibold">अपरिवर्तित / समान</p>
+                  <p className="text-sm font-bold text-slate-800 dark:text-slate-100 mt-0.5">
+                    {(portalSyncResult.matchedCount || 0) - (portalSyncResult.changes?.filter((c: any) => c.willUpdate).length || 0)}
+                  </p>
+                </div>
+              </div>
+
+              {/* Changes Preview Table */}
+              <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden max-h-64 overflow-y-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold sticky top-0">
+                    <tr>
+                      <th className="p-2.5">थाना</th>
+                      <th className="p-2.5">मौजूदा नंबर</th>
+                      <th className="p-2.5">पोर्टल CUG</th>
+                      <th className="p-2.5">SHO नाम</th>
+                      <th className="p-2.5 text-center">स्थिति</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {portalSyncResult.changes?.map((ch: any) => (
+                      <tr key={ch.stationId} className={ch.willUpdate ? 'bg-amber-50/50 dark:bg-amber-950/20' : ''}>
+                        <td className="p-2.5 font-bold text-slate-900 dark:text-slate-100">
+                          {ch.name}
+                        </td>
+                        <td className="p-2.5 font-mono text-slate-600 dark:text-slate-400">
+                          {ch.currentPhone || '-'}
+                        </td>
+                        <td className="p-2.5 font-mono font-bold text-slate-900 dark:text-white">
+                          {ch.newPhone || '-'}
+                        </td>
+                        <td className="p-2.5 text-slate-600 dark:text-slate-400 truncate max-w-[120px]">
+                          {ch.shoName || '-'}
+                        </td>
+                        <td className="p-2.5 text-center">
+                          {ch.willUpdate ? (
+                            <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-200">
+                              अपडेट होगा
+                            </span>
+                          ) : ch.matched ? (
+                            <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                              समान है
+                            </span>
+                          ) : (
+                            <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400">
+                              मैच नहीं
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
       </Modal>
     </div>
   );
