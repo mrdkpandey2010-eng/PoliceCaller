@@ -307,7 +307,7 @@ export const api = {
 
   // Station/Office contact phone update (Co-Admin district scoped and Super Admin)
   updateStationPhone: (stationId: string, phone: string) =>
-    request(`/admin/stations/${stationId}/phone`, { method: 'PATCH', body: JSON.stringify({ phone }) }),
+    request(`/admin/stations/${stationId}/phone`, { method: 'PUT', body: JSON.stringify({ phone }) }),
 
   // Real-time Feedback
   submitFeedback: (payload: { category: string; subject: string; message: string; rating?: number }) =>

@@ -338,15 +338,15 @@ export function createAdminRouter(db: D1Database) {
   router.put('/users/:userId/details', handleUpdateUserDetails);
   router.patch('/users/:userId/details', handleUpdateUserDetails);
 
-  // PATCH /api/admin/stations/:stationId/phone - Co-Admin (district-scoped) and Super Admin edit station/office phone number
-  router.patch('/stations/:stationId/phone', async (c) => {
+  // PATCH & PUT /api/admin/stations/:stationId/phone - Co-Admin (district-scoped) and Super Admin edit station/office phone number
+  const handleUpdateStationPhone = async (c: any) => {
     const user = c.get('user')!;
     const stationId = c.req.param('stationId');
     const body = await c.req.json();
     const { phone } = body;
 
-    if (!phone || typeof phone !== 'string' || !/^[0-9\-+\s]{6,15}$/.test(phone.trim())) {
-      return c.json({ error: 'Valid phone number is required (6-15 digits/standard phone format).' }, 422);
+    if (!phone || typeof phone !== 'string' || !/^[0-9\-+\s()]{6,20}$/.test(phone.trim())) {
+      return c.json({ error: 'Valid phone number is required (6-20 digits/standard phone format).' }, 422);
     }
 
     const target = await db
@@ -358,7 +358,10 @@ export function createAdminRouter(db: D1Database) {
       return c.json({ error: 'Station/Office not found.' }, 404);
     }
 
-    if (user.role === ROLES.DISTRICT_CO_ADMIN && target.district_id !== user.districtId) {
+    if (
+      user.role === ROLES.DISTRICT_CO_ADMIN &&
+      String(target.district_id || '').trim().toLowerCase() !== String(user.districtId || '').trim().toLowerCase()
+    ) {
       return c.json({ error: 'Forbidden: You may only edit station/office phone numbers within your assigned district.' }, 403);
     }
 
@@ -385,7 +388,10 @@ export function createAdminRouter(db: D1Database) {
       message: `Phone number for ${target.name} updated to ${cleanPhone}.`,
       phone: cleanPhone,
     });
-  });
+  };
+
+  router.patch('/stations/:stationId/phone', handleUpdateStationPhone);
+  router.put('/stations/:stationId/phone', handleUpdateStationPhone);
 
   // POST /api/admin/users/:userId/reset-password - Single-use reset token or new password
   router.post('/users/:userId/reset-password', async (c) => {

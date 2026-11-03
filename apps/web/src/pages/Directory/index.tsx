@@ -13,6 +13,7 @@ import {
   BookOpen,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Globe,
   ArrowLeft,
   RotateCcw,
@@ -80,8 +81,6 @@ export const Directory: React.FC<DirectoryProps> = ({
   const [selectedStation, setSelectedStation] = useState<string>('');
   const [selectedRank, setSelectedRank] = useState<string>('');
   const [favoritesOnly, setFavoritesOnly] = useState<boolean>(false);
-  const [showFilterSheet, setShowFilterSheet] = useState<boolean>(false);
-  const [filterStep, setFilterStep] = useState<1 | 2 | 3>(1);
 
   // Selected contact for detail view (V4.7 single-person detail modal)
   const [selectedContact, setSelectedContact] = useState<any | null>(null);
@@ -114,8 +113,8 @@ export const Directory: React.FC<DirectoryProps> = ({
         q: searchQuery,
         districtId: selectedDistrict || undefined,
         otherDistrict: isOther ? 'true' : 'false',
-        stationId: selectedStation || undefined,
-        designationId: selectedRank || undefined,
+        stationId: selectedStation && selectedStation !== '__ALL_STATIONS__' ? selectedStation : undefined,
+        designationId: selectedRank && selectedRank !== '__ALL_RANKS__' ? selectedRank : undefined,
         favorites: favoritesOnly ? 'true' : undefined,
         page: pageToFetch,
         limit,
@@ -175,7 +174,6 @@ export const Directory: React.FC<DirectoryProps> = ({
     setOtherDistrict(false);
     setFavoritesOnly(false);
     setSearchQuery('');
-    setFilterStep(1);
     setPage(1);
   };
 
@@ -268,19 +266,116 @@ export const Directory: React.FC<DirectoryProps> = ({
 
           {/* Filter Chips / Action Bar */}
           <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none text-xs">
-            <Button
-              variant={showFilterSheet ? 'teal' : 'outline'}
-              size="sm"
-              onClick={() => setShowFilterSheet(!showFilterSheet)}
-              aria-label="Toggle directory filter"
-              icon={<Filter className="w-3.5 h-3.5" />}
-              className="rounded-full shrink-0 shadow-xs"
-            >
-              {language === 'hi' ? 'डायनामिक फ़िल्टर' : 'Filter'}
-              {hasActiveFilters && (
-                <span className="w-2 h-2 rounded-full bg-[#147D84] ml-1" />
-              )}
-            </Button>
+            {/* In-Place Progressive Selector: जिला चुनें → थाना/कार्यालय चुनें → पद/रैंक चुनें */}
+            {!selectedDistrict ? (
+              <div className="relative shrink-0">
+                <select
+                  value=""
+                  onChange={(e) => {
+                    const distId = e.target.value;
+                    if (distId) {
+                      setSelectedDistrict(distId);
+                      setSelectedStation('');
+                      setSelectedRank('');
+                      setPage(1);
+                    }
+                  }}
+                  aria-label="जिला चुनें"
+                  className="h-9 pl-3.5 pr-8 rounded-full border border-teal-500/40 bg-teal-50/80 dark:bg-teal-950/40 text-[#147D84] dark:text-teal-300 font-bold text-xs shadow-xs focus:ring-2 focus:ring-[#147D84] focus:outline-none cursor-pointer appearance-none backdrop-blur-md"
+                >
+                  <option value="" disabled>
+                    {language === 'hi' ? 'जिला चुनें' : 'Select District'}
+                  </option>
+                  {districts.map((d) => (
+                    <option key={d.id} value={d.id} className="text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900">
+                      {d.name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-[#147D84] dark:text-teal-300 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
+            ) : !selectedStation ? (
+              <div className="relative shrink-0 animate-in fade-in">
+                <select
+                  value=""
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === '__CHANGE_DISTRICT__') {
+                      setSelectedDistrict('');
+                      setSelectedStation('');
+                      setSelectedRank('');
+                      setPage(1);
+                    } else if (val) {
+                      setSelectedStation(val);
+                      setSelectedRank('');
+                      setPage(1);
+                    }
+                  }}
+                  aria-label="थाना/कार्यालय चुनें"
+                  className="h-9 pl-3.5 pr-8 rounded-full border border-[#17324F]/40 dark:border-blue-400/40 bg-blue-50/80 dark:bg-slate-800/80 text-[#17324F] dark:text-blue-300 font-bold text-xs shadow-xs focus:ring-2 focus:ring-[#17324F] focus:outline-none cursor-pointer appearance-none backdrop-blur-md"
+                >
+                  <option value="" disabled>
+                    {language === 'hi' ? 'थाना/कार्यालय चुनें' : 'Select Station/Office'}
+                  </option>
+                  <option value="__ALL_STATIONS__" className="font-semibold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-900">
+                    {language === 'hi' ? '-- सभी थाने व कार्यालय --' : '-- All Stations & Offices --'}
+                  </option>
+                  <option value="__CHANGE_DISTRICT__" className="font-bold text-amber-600 bg-white dark:bg-slate-900">
+                    {language === 'hi' ? '← दूसरा जिला चुनें' : '← Change District'}
+                  </option>
+                  {stations.map((s) => (
+                    <option key={s.id} value={s.id} className="text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900">
+                      {s.name} ({s.type === 'POLICE_STATION' ? 'थाना' : 'कार्यालय'})
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-[#17324F] dark:text-blue-300 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
+            ) : !selectedRank ? (
+              <div className="relative shrink-0 animate-in fade-in">
+                <select
+                  value=""
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === '__CHANGE_STATION__') {
+                      setSelectedStation('');
+                      setSelectedRank('');
+                      setPage(1);
+                    } else if (val) {
+                      setSelectedRank(val);
+                      setPage(1);
+                    }
+                  }}
+                  aria-label="पद/रैंक चुनें"
+                  className="h-9 pl-3.5 pr-8 rounded-full border border-purple-500/40 bg-purple-50/80 dark:bg-purple-950/40 text-purple-800 dark:text-purple-300 font-bold text-xs shadow-xs focus:ring-2 focus:ring-purple-600 focus:outline-none cursor-pointer appearance-none backdrop-blur-md"
+                >
+                  <option value="" disabled>
+                    {language === 'hi' ? 'पद/रैंक चुनें' : 'Select Rank/Post'}
+                  </option>
+                  <option value="__ALL_RANKS__" className="font-semibold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-900">
+                    {language === 'hi' ? '-- सभी पद व रैंक --' : '-- All Ranks & Posts --'}
+                  </option>
+                  <option value="__CHANGE_STATION__" className="font-bold text-amber-600 bg-white dark:bg-slate-900">
+                    {language === 'hi' ? '← दूसरा थाना चुनें' : '← Change Station'}
+                  </option>
+                  {designations.map((des) => (
+                    <option key={des.id} value={des.id} className="text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900">
+                      {des.shortName ? `${des.name} (${des.shortName})` : des.name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-purple-700 dark:text-purple-300 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
+            ) : (
+              <button
+                onClick={clearAllFilters}
+                className="h-9 px-3.5 rounded-full border border-emerald-500/40 bg-emerald-50/80 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 font-bold text-xs shadow-xs hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-all shrink-0 flex items-center gap-1.5 backdrop-blur-md"
+                title={language === 'hi' ? 'फ़िल्टर रीसेट करें' : 'Reset Filter'}
+              >
+                <span>{language === 'hi' ? '✓ फ़िल्टर लागू' : '✓ Filter Active'}</span>
+                <RotateCcw className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+              </button>
+            )}
 
             <button
               onClick={() => {
@@ -306,7 +401,6 @@ export const Directory: React.FC<DirectoryProps> = ({
                     setSelectedDistrict('');
                     setSelectedStation('');
                     setSelectedRank('');
-                    setFilterStep(1);
                     setPage(1);
                   }}
                   className="ml-1 hover:text-red-500 font-bold"
@@ -320,10 +414,15 @@ export const Directory: React.FC<DirectoryProps> = ({
             {selectedStation && (
               <Badge variant="primary" size="sm" className="shrink-0 flex items-center gap-1 rounded-full">
                 <Building className="w-3 h-3" />
-                <span>{stations.find((s) => s.id === selectedStation)?.name}</span>
+                <span>
+                  {selectedStation === '__ALL_STATIONS__'
+                    ? (language === 'hi' ? 'सभी थाने' : 'All Stations')
+                    : stations.find((s) => s.id === selectedStation)?.name}
+                </span>
                 <button
                   onClick={() => {
                     setSelectedStation('');
+                    setSelectedRank('');
                     setPage(1);
                   }}
                   className="ml-1 hover:text-red-500 font-bold"
@@ -337,7 +436,11 @@ export const Directory: React.FC<DirectoryProps> = ({
             {selectedRank && (
               <Badge variant="neutral" size="sm" className="shrink-0 flex items-center gap-1 rounded-full">
                 <Shield className="w-3 h-3" />
-                <span>{designations.find((des) => des.id === selectedRank)?.name}</span>
+                <span>
+                  {selectedRank === '__ALL_RANKS__'
+                    ? (language === 'hi' ? 'सभी पद' : 'All Ranks')
+                    : designations.find((des) => des.id === selectedRank)?.name}
+                </span>
                 <button
                   onClick={() => {
                     setSelectedRank('');
@@ -360,255 +463,6 @@ export const Directory: React.FC<DirectoryProps> = ({
               </button>
             )}
           </div>
-
-          {/* Unified Dynamic Filter Box (Requirement 2) - Frosted Glass */}
-          {showFilterSheet && (
-            <div className="mb-4 p-4 bg-white/85 dark:bg-slate-900/85 backdrop-blur-lg rounded-2xl border border-slate-200/80 dark:border-white/10 shadow-lg space-y-3 animate-in fade-in transition-all">
-              {/* Header with Title and Reset */}
-              <div className="flex items-center justify-between pb-2.5 border-b border-slate-200/70 dark:border-slate-800">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-[#17324F] dark:text-teal-400 uppercase tracking-wider flex items-center gap-1.5">
-                    <Filter className="w-3.5 h-3.5 text-[#147D84]" />
-                    <span>{language === 'hi' ? 'डायनामिक विभागीय फ़िल्टर' : 'Departmental Filter'}</span>
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  {hasActiveFilters && (
-                    <button
-                      onClick={clearAllFilters}
-                      className="text-xs font-semibold text-red-500 hover:text-red-700 dark:hover:text-red-400 transition-colors flex items-center gap-1"
-                    >
-                      <RotateCcw className="w-3 h-3" />
-                      <span>{language === 'hi' ? 'रीसेट करें' : 'Reset'}</span>
-                    </button>
-                  )}
-                  <button
-                    onClick={() => setShowFilterSheet(false)}
-                    className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-full"
-                    aria-label="Close filter"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Progress Breadcrumbs Bar */}
-              <div className="flex items-center gap-1.5 text-xs overflow-x-auto pb-1 scrollbar-none">
-                {/* Step 1 Pill */}
-                <button
-                  type="button"
-                  onClick={() => setFilterStep(1)}
-                  className={`px-2.5 py-1 rounded-lg font-bold text-xs flex items-center gap-1 transition-all ${
-                    filterStep === 1
-                      ? 'bg-[#17324F] text-white shadow-xs'
-                      : selectedDistrict
-                      ? 'bg-teal-500/15 text-teal-700 dark:text-teal-300 border border-teal-500/30'
-                      : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
-                  }`}
-                >
-                  <span>1. जनपद</span>
-                  {selectedDistrict && (
-                    <span className="ml-1 text-[11px] font-normal truncate max-w-[90px]">
-                      ({districts.find((d) => d.id === selectedDistrict)?.name || 'चयनित'})
-                    </span>
-                  )}
-                </button>
-
-                <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-
-                {/* Step 2 Pill */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (selectedDistrict) setFilterStep(2);
-                  }}
-                  disabled={!selectedDistrict}
-                  className={`px-2.5 py-1 rounded-lg font-bold text-xs flex items-center gap-1 transition-all ${
-                    filterStep === 2
-                      ? 'bg-[#17324F] text-white shadow-xs'
-                      : selectedStation
-                      ? 'bg-teal-500/15 text-teal-700 dark:text-teal-300 border border-teal-500/30'
-                      : selectedDistrict
-                      ? 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
-                      : 'opacity-40 cursor-not-allowed bg-slate-100 dark:bg-slate-800 text-slate-400'
-                  }`}
-                >
-                  <span>2. थाना/कार्यालय</span>
-                  {selectedStation && (
-                    <span className="ml-1 text-[11px] font-normal truncate max-w-[90px]">
-                      ({stations.find((s) => s.id === selectedStation)?.name || 'चयनित'})
-                    </span>
-                  )}
-                </button>
-
-                <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-
-                {/* Step 3 Pill */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (selectedDistrict) setFilterStep(3);
-                  }}
-                  disabled={!selectedDistrict}
-                  className={`px-2.5 py-1 rounded-lg font-bold text-xs flex items-center gap-1 transition-all ${
-                    filterStep === 3
-                      ? 'bg-[#17324F] text-white shadow-xs'
-                      : selectedRank
-                      ? 'bg-teal-500/15 text-teal-700 dark:text-teal-300 border border-teal-500/30'
-                      : selectedDistrict
-                      ? 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
-                      : 'opacity-40 cursor-not-allowed bg-slate-100 dark:bg-slate-800 text-slate-400'
-                  }`}
-                >
-                  <span>3. पद/रैंक</span>
-                  {selectedRank && (
-                    <span className="ml-1 text-[11px] font-normal truncate max-w-[90px]">
-                      ({designations.find((des) => des.id === selectedRank)?.name || 'चयनित'})
-                    </span>
-                  )}
-                </button>
-              </div>
-
-              {/* Dynamic Filter Content Area */}
-              <div className="pt-2">
-                {/* STEP 1: District Selection */}
-                {filterStep === 1 && (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                        <MapPin className="w-3.5 h-3.5 text-[#147D84]" />
-                        <span>{language === 'hi' ? 'चरण 1: जनपद चुनें (75 आधिकारिक जनपद)' : 'Step 1: Select District'}</span>
-                      </label>
-                      <span className="text-[11px] text-slate-400">
-                        {language === 'hi' ? 'जनपद चुनने पर अगले चरण खुलेंगे' : 'Select district to proceed'}
-                      </span>
-                    </div>
-
-                    <select
-                      value={selectedDistrict}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setSelectedDistrict(val);
-                        setSelectedStation('');
-                        setSelectedRank('');
-                        setPage(1);
-                        if (val) {
-                          setFilterStep(2);
-                        }
-                      }}
-                      className="w-full h-11 px-3.5 rounded-xl border border-slate-200/80 dark:border-white/10 bg-white/90 dark:bg-slate-800/90 text-xs font-semibold text-slate-800 dark:text-slate-100 shadow-xs focus:ring-2 focus:ring-[#147D84]/30"
-                    >
-                      <option value="">
-                        {language === 'hi' ? '-- जनपद चुनें (Select District) --' : '-- Select District --'}
-                      </option>
-                      {districts.map((d) => (
-                        <option key={d.id} value={d.id}>
-                          {d.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                {/* STEP 2: Station / Office Selection */}
-                {filterStep === 2 && (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <button
-                        type="button"
-                        onClick={() => setFilterStep(1)}
-                        className="text-xs font-bold text-[#147D84] hover:text-[#17324F] dark:hover:text-teal-300 flex items-center gap-1"
-                      >
-                        <ArrowLeft className="w-3.5 h-3.5" />
-                        <span>{language === 'hi' ? 'पीछे (जनपद)' : 'Back to District'}</span>
-                      </button>
-                      <span className="text-[11px] font-semibold text-slate-500">
-                        जनपद: <strong className="text-slate-800 dark:text-slate-200">{districts.find((d) => d.id === selectedDistrict)?.name}</strong>
-                      </span>
-                    </div>
-
-                    <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5 pt-1">
-                      <Building className="w-3.5 h-3.5 text-[#147D84]" />
-                      <span>{language === 'hi' ? 'चरण 2: थाना या कार्यालय चुनें' : 'Step 2: Select Station / Office'}</span>
-                    </label>
-
-                    <select
-                      value={selectedStation}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setSelectedStation(val);
-                        setPage(1);
-                        setFilterStep(3);
-                      }}
-                      className="w-full h-11 px-3.5 rounded-xl border border-slate-200/80 dark:border-white/10 bg-white/90 dark:bg-slate-800/90 text-xs font-semibold text-slate-800 dark:text-slate-100 shadow-xs focus:ring-2 focus:ring-[#147D84]/30"
-                    >
-                      <option value="">
-                        {language === 'hi' ? '-- सभी थाने व कार्यालय (All Stations/Offices) --' : '-- All Stations/Offices --'}
-                      </option>
-                      {stations.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name}
-                        </option>
-                      ))}
-                    </select>
-
-                    <div className="flex justify-end pt-1">
-                      <button
-                        type="button"
-                        onClick={() => setFilterStep(3)}
-                        className="text-xs text-[#147D84] hover:underline font-semibold flex items-center gap-1"
-                      >
-                        <span>{language === 'hi' ? 'पद/रैंक विकल्प पर जाएँ →' : 'Proceed to Rank Selection →'}</span>
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* STEP 3: Rank / Designation Selection */}
-                {filterStep === 3 && (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <button
-                        type="button"
-                        onClick={() => setFilterStep(2)}
-                        className="text-xs font-bold text-[#147D84] hover:text-[#17324F] dark:hover:text-teal-300 flex items-center gap-1"
-                      >
-                        <ArrowLeft className="w-3.5 h-3.5" />
-                        <span>{language === 'hi' ? 'पीछे (थाना/कार्यालय)' : 'Back to Station'}</span>
-                      </button>
-                      <span className="text-[11px] font-semibold text-slate-500 truncate max-w-[200px]">
-                        {stations.find((s) => s.id === selectedStation)?.name || districts.find((d) => d.id === selectedDistrict)?.name}
-                      </span>
-                    </div>
-
-                    <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5 pt-1">
-                      <Shield className="w-3.5 h-3.5 text-[#147D84]" />
-                      <span>{language === 'hi' ? 'चरण 3: पद या रैंक चुनें' : 'Step 3: Select Rank / Designation'}</span>
-                    </label>
-
-                    <select
-                      value={selectedRank}
-                      onChange={(e) => {
-                        setSelectedRank(e.target.value);
-                        setPage(1);
-                      }}
-                      className="w-full h-11 px-3.5 rounded-xl border border-slate-200/80 dark:border-white/10 bg-white/90 dark:bg-slate-800/90 text-xs font-semibold text-slate-800 dark:text-slate-100 shadow-xs focus:ring-2 focus:ring-[#147D84]/30"
-                    >
-                      <option value="">
-                        {language === 'hi' ? '-- सभी पद व रैंक (All Ranks) --' : '-- All Ranks/Designations --'}
-                      </option>
-                      {designations.map((d) => (
-                        <option key={d.id} value={d.id}>
-                          {d.shortName ? `${d.name} (${d.shortName})` : d.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
 
           {/* Directory Contact List - STRICT CONSTRAINT: Contact card height, width & dimensions preserved */}
           <div className="space-y-2 mt-2">

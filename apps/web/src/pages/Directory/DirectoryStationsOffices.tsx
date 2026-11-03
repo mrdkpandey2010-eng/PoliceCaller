@@ -39,8 +39,8 @@ export const DirectoryStationsOffices: React.FC<DirectoryStationsOfficesProps> =
   const handleSavePhone = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingStation) return;
-    if (!/^[0-9\-+\s]{6,15}$/.test(newStationPhone.trim())) {
-      alert('Please enter a valid phone number (6-15 digits/standard phone format).');
+    if (!/^[0-9\-+\s()]{6,20}$/.test(newStationPhone.trim())) {
+      alert('कृपया एक वैध फ़ोन नंबर दर्ज करें (6-20 अंक/मानक फ़ोन स्वरूप)। / Please enter a valid phone number.');
       return;
     }
     setSavingPhone(true);
@@ -271,7 +271,8 @@ export const DirectoryStationsOffices: React.FC<DirectoryStationsOfficesProps> =
 
                   {/* Co-Admin & Super Admin Phone Edit Action */}
                   {(user?.role === ROLES.SUPER_ADMIN ||
-                    (user?.role === ROLES.DISTRICT_CO_ADMIN && user?.districtId === item.districtId)) && (
+                    (user?.role === ROLES.DISTRICT_CO_ADMIN &&
+                      String(user?.districtId || '').trim().toLowerCase() === String(item.districtId || '').trim().toLowerCase())) && (
                     <Button
                       variant="outline"
                       size="sm"

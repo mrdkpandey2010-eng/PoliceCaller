@@ -199,8 +199,8 @@ export const AdminDashboard: React.FC = () => {
   const handleSaveStationPhone = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingStation) return;
-    if (!/^[0-9\-+\s]{6,15}$/.test(newStationPhone.trim())) {
-      alert('Please enter a valid phone number (6-15 digits/standard format).');
+    if (!/^[0-9\-+\s()]{6,20}$/.test(newStationPhone.trim())) {
+      alert('कृपया एक वैध फ़ोन नंबर दर्ज करें (6-20 अंक/मानक फ़ोन स्वरूप)। / Please enter a valid phone number.');
       return;
     }
     setSavingStationPhone(true);

@@ -62,7 +62,7 @@ export function createApp(dbInstance?: D1Database) {
         return 'https://police-directory-app.pages.dev';
       },
       allowHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-      allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
       maxAge: 86400,
     })
   );
