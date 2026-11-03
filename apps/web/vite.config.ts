@@ -59,6 +59,19 @@ export default defineConfig({
       '@police-directory/ui': path.resolve(__dirname, '../../packages/ui/src'),
     },
   },
+  build: {
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        manualChunks(id: string) {
+          const normId = id.replace(/\\/g, '/');
+          if (normId.includes('xlsx')) return 'vendor-xlsx';
+          if (normId.includes('lucide-react')) return 'vendor-icons';
+          if (normId.includes('react') || normId.includes('react-dom') || normId.includes('scheduler')) return 'vendor-react';
+        },
+      },
+    },
+  },
   server: {
     port: 5173,
     proxy: {

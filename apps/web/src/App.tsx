@@ -1,15 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, Suspense, lazy } from 'react';
 import { TopBar, BottomNav, NavTab } from '@police-directory/ui';
 import { useAuth } from './context/AuthContext';
 import { useLanguage } from './context/LanguageContext';
 import { useTheme } from './context/ThemeContext';
 import { Login } from './pages/Auth/Login';
-import { Register } from './pages/Auth/Register';
 import { Directory, DirectorySection } from './pages/Directory';
-import { Messenger } from './pages/Messenger';
-import { Notices } from './pages/Notices';
-import { Profile } from './pages/Profile';
-import { AdminDashboard } from './pages/Admin';
+
+// Lazy load secondary routes so initial mobile bundle is lightweight & loads in <1s
+const Register = lazy(() => import('./pages/Auth/Register').then(m => ({ default: m.Register })));
+const Messenger = lazy(() => import('./pages/Messenger').then(m => ({ default: m.Messenger })));
+const Notices = lazy(() => import('./pages/Notices').then(m => ({ default: m.Notices })));
+const Profile = lazy(() => import('./pages/Profile').then(m => ({ default: m.Profile })));
+const AdminDashboard = lazy(() => import('./pages/Admin').then(m => ({ default: m.AdminDashboard })));
+
 import { TermsModal } from './components/TermsModal';
 import { NotificationPermissionModal } from './components/NotificationPermissionModal';
 import { FeedbackModal } from './components/FeedbackModal';
@@ -244,10 +247,12 @@ export const AppContent: React.FC = () => {
   if (!user) {
     if (authView === 'register') {
       return (
-        <Register
-          initialIdentifier={prefilledIdentifier}
-          onNavigateToLogin={() => setAuthView('login')}
-        />
+        <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="w-8 h-8 border-3 border-[#17324F] border-t-transparent rounded-full animate-spin" /></div>}>
+          <Register
+            initialIdentifier={prefilledIdentifier}
+            onNavigateToLogin={() => setAuthView('login')}
+          />
+        </Suspense>
       );
     }
     return (
@@ -345,26 +350,32 @@ export const AppContent: React.FC = () => {
 
       {/* Main Content Area */}
       <main className="flex-1 w-full">
-        {activeTab === 'directory' && (
-          <Directory
-            onOpenChat={handleOpenChatWithUser}
-            initialSection={activeDirectorySection}
-            onSectionChange={handleDirectorySectionChange}
-          />
-        )}
+        <Suspense fallback={
+          <div className="flex items-center justify-center p-12">
+            <div className="w-8 h-8 border-3 border-[#17324F] border-t-transparent rounded-full animate-spin" />
+          </div>
+        }>
+          {activeTab === 'directory' && (
+            <Directory
+              onOpenChat={handleOpenChatWithUser}
+              initialSection={activeDirectorySection}
+              onSectionChange={handleDirectorySectionChange}
+            />
+          )}
 
-        {activeTab === 'chats' && (
-          <Messenger
-            initialRecipientId={targetChatUserId}
-            onClearInitialRecipient={() => setTargetChatUserId(null)}
-          />
-        )}
+          {activeTab === 'chats' && (
+            <Messenger
+              initialRecipientId={targetChatUserId}
+              onClearInitialRecipient={() => setTargetChatUserId(null)}
+            />
+          )}
 
-        {activeTab === 'notices' && <Notices />}
+          {activeTab === 'notices' && <Notices />}
 
-        {activeTab === 'profile' && <Profile />}
+          {activeTab === 'profile' && <Profile />}
 
-        {activeTab === 'admin' && isAdmin && <AdminDashboard />}
+          {activeTab === 'admin' && isAdmin && <AdminDashboard />}
+        </Suspense>
       </main>
 
       {/* Mobile Bottom Navigation (Strictly NO Calls Tab) */}

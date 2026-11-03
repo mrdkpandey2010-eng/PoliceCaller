@@ -348,7 +348,7 @@ export async function fetchPortalThanas(districtCode: string | number): Promise<
 export async function fetchPortalThanaDetails(
   districtCode: string | number,
   thanaCode: string | number,
-  timeoutMs: number = 15000
+  timeoutMs: number = 4000
 ): Promise<ParsedThanaDetails> {
   const cacheKey = `${districtCode}:${thanaCode}`;
   const now = Date.now();
@@ -562,6 +562,7 @@ export function createExternalPortalRouter(db: D1Database) {
             .first<any>();
 
           if (cached && (cached.sho_name || cached.sho_cug || cached.co_name || cached.jurisdiction)) {
+            c.header('Cache-Control', 'public, max-age=300, s-maxage=1800, stale-while-revalidate=3600');
             return c.json({
               success: true,
               hasData: true,
@@ -608,6 +609,7 @@ export function createExternalPortalRouter(db: D1Database) {
             .first<any>();
 
           if (cached && (cached.sho_name || cached.sho_cug || cached.co_name || cached.jurisdiction)) {
+            c.header('Cache-Control', 'public, max-age=300, s-maxage=1800, stale-while-revalidate=3600');
             return c.json({
               success: true,
               hasData: true,
@@ -720,6 +722,7 @@ export function createExternalPortalRouter(db: D1Database) {
         }
       }
 
+      c.header('Cache-Control', 'public, max-age=300, s-maxage=1800, stale-while-revalidate=3600');
       return c.json({
         success: true,
         hasData: true,
@@ -957,7 +960,7 @@ export function createExternalPortalRouter(db: D1Database) {
         await Promise.allSettled(
           toFetch.map(async ({ stn, match }) => {
             try {
-              const details = await fetchPortalThanaDetails(match.district.code, match.thana.code, 12000);
+              const details = await fetchPortalThanaDetails(match.district.code, match.thana.code, 3500);
               const rawCug = (details.shoCug || '').replace(/[^0-9]/g, '');
               const validPhone = rawCug.length >= 10 ? rawCug.slice(-10) : (stn.phone || null);
               const willUpdate = Boolean(validPhone && validPhone !== stn.phone);

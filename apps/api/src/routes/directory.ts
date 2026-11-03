@@ -162,6 +162,7 @@ export function createDirectoryRouter(db: D1Database) {
 
     const { results } = await db.prepare(sql).bind(...params).all();
 
+    c.header('Cache-Control', 'private, max-age=15, stale-while-revalidate=60');
     return c.json({
       success: true,
       contacts: results,
@@ -362,6 +363,7 @@ export function createDirectoryRouter(db: D1Database) {
     }
 
     const { results } = await db.prepare(sql).bind(...params).all();
+    c.header('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=600');
     return c.json({
       success: true,
       stationsOffices: results,
