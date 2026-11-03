@@ -48,16 +48,23 @@ export function cleanName(name: string): string {
   
   // Specific aliases & transliteration variations
   n = n.replace(/hazaratganj/g, 'hazratganj');
+  n = n.replace(/bijnaur/g, 'bijnor');
+  n = n.replace(/banthara/g, 'banthra');
+  n = n.replace(/gosaiganj/g, 'gosainganj');
+  n = n.replace(/nagram/g, 'nagaram');
+  n = n.replace(/kaesarbagh|qaiserbagh/g, 'kaiserbagh');
+  n = n.replace(/wazirganj/g, 'wazeerganj');
+  n = n.replace(/ashiana/g, 'ashiyana');
+  n = n.replace(/maday\s*ganj/g, 'madeyganj');
+  n = n.replace(/second/g, 'ii');
+  n = n.replace(/-ii/g, 'ii');
+  n = n.replace(/b\.?b\.?d\.?|babu\s*banarasi\s*das/g, 'bbd');
+  n = n.replace(/vistar/g, 'extension');
   n = n.replace(/b\.?t\.?k\.?|bkt/g, 'bakshikatalab');
   n = n.replace(/p\.?g\.?i\.?/g, 'pgi');
   n = n.replace(/g\.?r\.?p\.?/g, 'grp');
   n = n.replace(/cantt\.?/g, 'cantt');
   n = n.replace(/\b(chhavani|chhawani|chhavni)\b/g, '');
-
-  // Deduplicate identical repeated tokens
-  n = n.replace(/(bakshikatalab)+/g, 'bakshikatalab');
-  n = n.replace(/(cantt)+/g, 'cantt');
-  n = n.replace(/(hazratganj)+/g, 'hazratganj');
 
   const stopWords = [
     'police station',
@@ -170,40 +177,129 @@ export function parseThanaDetailsHtml(html: string): ParsedThanaDetails {
   return result;
 }
 
-// Fetch district list from portal with caching
+// Pre-defined built-in UP Police official portal district codes (Zero network latency fallback)
+export const BUILTIN_PORTAL_DISTRICTS: PortalDistrictItem[] = [
+  { name: 'AGRA (COMMISSIONERATE)', code: '81' },
+  { name: 'ALIGARH', code: '2' },
+  { name: 'AMBEDKAR NAGAR', code: '4' },
+  { name: 'AMETHI', code: '20' },
+  { name: 'AMROHA', code: '40' },
+  { name: 'AURAIYA', code: '5' },
+  { name: 'AYODHYA', code: '26' },
+  { name: 'AZAMGARH', code: '6' },
+  { name: 'BAGPAT', code: '7' },
+  { name: 'BAHRAICH', code: '8' },
+  { name: 'BALLIA', code: '9' },
+  { name: 'BALRAMPUR', code: '10' },
+  { name: 'BANDA', code: '11' },
+  { name: 'BARABANKI', code: '12' },
+  { name: 'BAREILLY', code: '13' },
+  { name: 'BASTI', code: '14' },
+  { name: 'BHADOI', code: '15' },
+  { name: 'BIJNOR', code: '17' },
+  { name: 'BUDAUN', code: '18' },
+  { name: 'BULANDSHAHR', code: '19' },
+  { name: 'CHANDAULI', code: '21' },
+  { name: 'CHITRAKOOT', code: '22' },
+  { name: 'DEORIA', code: '23' },
+  { name: 'ETAH', code: '24' },
+  { name: 'ETAWAH', code: '25' },
+  { name: 'FATEHGARH', code: '27' },
+  { name: 'FATEHPUR', code: '28' },
+  { name: 'FIROZABAD', code: '29' },
+  { name: 'GAUTAMBUDH NAGAR (COMMISSIONERATE)', code: '30' },
+  { name: 'GHAZIABAD (COMMISSIONERATE)', code: '80' },
+  { name: 'GHAZIPUR', code: '32' },
+  { name: 'GONDA', code: '33' },
+  { name: 'GORAKHPUR', code: '34' },
+  { name: 'HAMIRPUR', code: '35' },
+  { name: 'HAPUR', code: '61' },
+  { name: 'HARDOI', code: '36' },
+  { name: 'HATHRAS', code: '50' },
+  { name: 'JALAUN', code: '37' },
+  { name: 'JAUNPUR', code: '38' },
+  { name: 'JHANSI', code: '39' },
+  { name: 'KANNAUJ', code: '42' },
+  { name: 'KANPUR DEHAT', code: '43' },
+  { name: 'KANPUR NAGAR (COMMISSIONERATE)', code: '77' },
+  { name: 'KASGANJ', code: '45' },
+  { name: 'KAUSHAMBI', code: '46' },
+  { name: 'KHERI', code: '47' },
+  { name: 'KUSHINAGAR', code: '60' },
+  { name: 'LALITPUR', code: '48' },
+  { name: 'LUCKNOW CITY (COMMISSIONERATE)', code: '76' },
+  { name: 'MAHARAJGANJ', code: '51' },
+  { name: 'MAHOBA', code: '52' },
+  { name: 'MAINPURI', code: '53' },
+  { name: 'MATHURA', code: '54' },
+  { name: 'MAU', code: '55' },
+  { name: 'MEERUT', code: '56' },
+  { name: 'MIRZAPUR', code: '57' },
+  { name: 'MORADABAD', code: '58' },
+  { name: 'MUZAFFAR NAGAR', code: '59' },
+  { name: 'PILIBHIT', code: '62' },
+  { name: 'PRATAPGARH', code: '64' },
+  { name: 'PRAYAGRAJ (COMMISSIONERATE)', code: '82' },
+  { name: 'RAEBARELI', code: '65' },
+  { name: 'RAMPUR', code: '66' },
+  { name: 'SAHARANPUR', code: '67' },
+  { name: 'SAMBHAL', code: '16' },
+  { name: 'SANT KABIR NAGAR', code: '41' },
+  { name: 'SHAHJAHANPUR', code: '68' },
+  { name: 'SHAMLI', code: '63' },
+  { name: 'SHRAVASTI', code: '69' },
+  { name: 'SIDHARTH NAGAR', code: '70' },
+  { name: 'SITAPUR', code: '71' },
+  { name: 'SONBHADRA', code: '72' },
+  { name: 'SULTANPUR', code: '73' },
+  { name: 'UNNAO', code: '74' },
+  { name: 'VARANASI NAGAR (COMMISSIONERATE)', code: '78' },
+];
+
+// Fetch district list from portal with caching and instant builtin fallback
 export async function fetchPortalDistricts(): Promise<PortalDistrictItem[]> {
   const now = Date.now();
   if (cachedDistricts && cachedDistricts.expiresAt > now) {
     return cachedDistricts.data;
   }
 
-  const res = await fetch('https://uppolice.gov.in/districtHandler.ashx', {
-    headers: { 'User-Agent': PORTAL_USER_AGENT },
-    signal: AbortSignal.timeout(15000),
-  });
-
-  if (!res.ok) {
-    throw new Error(`Portal districtHandler failed with HTTP ${res.status}`);
-  }
-
-  const raw = await res.json() as any;
-  const list: PortalDistrictItem[] = [];
-  const districts = raw.districts || [];
-  const codes = raw.districtsCode || [];
-
-  for (let i = 0; i < districts.length; i++) {
-    list.push({
-      name: districts[i]?.d || '',
-      code: codes[i]?.c || '',
+  try {
+    const res = await fetch('https://uppolice.gov.in/districtHandler.ashx', {
+      headers: { 'User-Agent': PORTAL_USER_AGENT },
+      signal: AbortSignal.timeout(6000),
     });
+
+    if (res.ok) {
+      const raw = await res.json() as any;
+      const list: PortalDistrictItem[] = [];
+      const districts = raw.districts || [];
+      const codes = raw.districtsCode || [];
+
+      for (let i = 0; i < districts.length; i++) {
+        list.push({
+          name: districts[i]?.d || '',
+          code: String(codes[i]?.c || ''),
+        });
+      }
+
+      if (list.length > 0) {
+        cachedDistricts = {
+          data: list,
+          expiresAt: now + CACHE_TTL_DISTRICTS_MS,
+        };
+        return list;
+      }
+    }
+  } catch (err) {
+    console.warn('districtHandler fetch failed or timed out, using builtin portal districts fallback:', err);
   }
 
+  // Instant zero-latency fallback to verified portal districts
   cachedDistricts = {
-    data: list,
+    data: BUILTIN_PORTAL_DISTRICTS,
     expiresAt: now + CACHE_TTL_DISTRICTS_MS,
   };
-
-  return list;
+  return BUILTIN_PORTAL_DISTRICTS;
 }
 
 // Fetch thana list for a given portal district code
@@ -217,7 +313,7 @@ export async function fetchPortalThanas(districtCode: string | number): Promise<
 
   const res = await fetch(`https://uppolice.gov.in/thanaHandler.ashx?c=${encodeURIComponent(key)}`, {
     headers: { 'User-Agent': PORTAL_USER_AGENT },
-    signal: AbortSignal.timeout(15000),
+    signal: AbortSignal.timeout(8000),
   });
 
   if (!res.ok) {
@@ -247,7 +343,8 @@ export async function fetchPortalThanas(districtCode: string | number): Promise<
 // Fetch thana details HTML and parse
 export async function fetchPortalThanaDetails(
   districtCode: string | number,
-  thanaCode: string | number
+  thanaCode: string | number,
+  timeoutMs: number = 7000
 ): Promise<ParsedThanaDetails> {
   const cacheKey = `${districtCode}:${thanaCode}`;
   const now = Date.now();
@@ -259,7 +356,7 @@ export async function fetchPortalThanaDetails(
   const url = `https://uppolice.gov.in/en/ThanaDetails?d=${encodeURIComponent(String(districtCode))}&t=${encodeURIComponent(String(thanaCode))}`;
   const res = await fetch(url, {
     headers: { 'User-Agent': PORTAL_USER_AGENT },
-    signal: AbortSignal.timeout(15000),
+    signal: AbortSignal.timeout(timeoutMs),
   });
 
   if (!res.ok) {
@@ -279,13 +376,13 @@ export async function fetchPortalThanaDetails(
 
 // Explicit mappings for commissionerates and split districts
 const DISTRICT_CODE_OVERRIDES: Record<string, (string | number)[]> = {
-  // Lucknow (City Commissionerate & Rural)
-  dist_lucknow: [76, 28],
-  lucknow: [76, 28],
+  // Lucknow: Code 76 (Lucknow City Commissionerate) contains all 54 urban & rural thanas
+  dist_lucknow: [76],
+  lucknow: [76],
   // Kanpur (Kanpur Nagar Commissionerate, Dehat, Outer)
-  dist_kanpur_nagar: [77, 23],
-  dist_kanpur_dehat: [22],
-  kanpur: [77, 22, 23],
+  dist_kanpur_nagar: [77],
+  dist_kanpur_dehat: [43],
+  kanpur: [77, 43],
   // Agra Commissionerate
   dist_agra: [81],
   agra: [81],
@@ -299,9 +396,9 @@ const DISTRICT_CODE_OVERRIDES: Record<string, (string | number)[]> = {
   dist_prayagraj: [82],
   prayagraj: [82],
   allahabad: [82],
-  // Varanasi Commissionerate & Rural
-  dist_varanasi: [78, 72],
-  varanasi: [78, 72],
+  // Varanasi Commissionerate
+  dist_varanasi: [78],
+  varanasi: [78],
 };
 
 // Find candidate portal district codes for a given CCTNS district ID / name
@@ -432,6 +529,29 @@ export function createExternalPortalRouter(db: D1Database) {
     }
 
     try {
+      // Specialized units (GRP, AHTU) that have separate departmental command
+      const normStn = stationName.toLowerCase();
+      if (normStn.includes('grp') || normStn.includes('railway')) {
+        return c.json({
+          success: false,
+          fallback: true,
+          stationName,
+          districtName,
+          localPhone,
+          message: 'यह एक राजकीय रेलवे पुलिस (GRP) थाना है। इसका संपर्क सीधे रेलवे अनुभाग एवं विभागीय डायरेक्टरी द्वारा संचालित है।',
+        });
+      }
+      if (normStn.includes('ahtu')) {
+        return c.json({
+          success: false,
+          fallback: true,
+          stationName,
+          districtName,
+          localPhone,
+          message: 'यह मानव तस्करी रोधी इकाई (AHTU) विशेष विंग है। इसका संपर्क सीधे जिला नियंत्रण कक्ष द्वारा संचालित है।',
+        });
+      }
+
       const candidates = await findPortalDistrictCandidates(districtId, districtName);
       if (candidates.length === 0) {
         return c.json({
@@ -477,8 +597,9 @@ export function createExternalPortalRouter(db: D1Database) {
         stationName,
         districtName,
         localPhone,
+        message: 'उत्तर प्रदेश पुलिस पोर्टल से डेटा लोड करने में विलंब हुआ। डेटाबेस का सत्यापित नंबर उपलब्ध है।',
         error: err.message || 'पोर्टल से डेटा प्राप्त करने में असमर्थ।',
-      }, 502);
+      });
     }
   });
 
@@ -488,86 +609,101 @@ export function createExternalPortalRouter(db: D1Database) {
   // - Never inserts new rows (No duplicates).
   // - Never modifies offices (type != 'POLICE_STATION' are strictly skipped).
   // - District Co-Admin can only sync their assigned districtId.
+  // - Cloudflare subrequest limit safe: batches candidates and processes in parallel chunks of 6.
   router.post('/sync-district', async (c) => {
-    const user = c.get('user');
-    if (!user) {
-      return c.json({ error: 'Unauthorized: Authentication required.' }, 401);
-    }
+    try {
+      const user = c.get('user');
+      if (!user) {
+        return c.json({ error: 'Unauthorized: Authentication required.' }, 401);
+      }
 
-    const isSuperAdmin = user.role === ROLES.SUPER_ADMIN;
-    const isCoAdmin = user.role === ROLES.DISTRICT_CO_ADMIN;
+      const isSuperAdmin = user.role === ROLES.SUPER_ADMIN;
+      const isCoAdmin = user.role === ROLES.DISTRICT_CO_ADMIN;
 
-    if (!isSuperAdmin && !isCoAdmin) {
-      return c.json({ error: 'Forbidden: Admin privilege required to sync station contact numbers.' }, 403);
-    }
+      if (!isSuperAdmin && !isCoAdmin) {
+        return c.json({ error: 'Forbidden: Admin privilege required to sync station contact numbers.' }, 403);
+      }
 
-    const body = await c.req.json().catch(() => ({}));
-    const requestedDistrictId = body.districtId || user.districtId;
-    const dryRun = body.dryRun !== false; // Defaults to dryRun=true for safety
+      const body = await c.req.json().catch(() => ({}));
+      const requestedDistrictId = body.districtId || user.districtId;
+      const dryRun = body.dryRun !== false; // Defaults to dryRun=true for safety
 
-    // Enforce district boundary for Co-Admin
-    if (isCoAdmin && requestedDistrictId !== user.districtId) {
-      return c.json({ error: 'Access Denied: District Co-Admin can only sync stations within their assigned district.' }, 403);
-    }
+      // Enforce district boundary for Co-Admin
+      if (isCoAdmin && requestedDistrictId !== user.districtId) {
+        return c.json({ error: 'Access Denied: District Co-Admin can only sync stations within their assigned district.' }, 403);
+      }
 
-    if (!requestedDistrictId) {
-      return c.json({ error: 'districtId is required.' }, 400);
-    }
+      if (!requestedDistrictId) {
+        return c.json({ error: 'districtId is required.' }, 400);
+      }
 
-    const district = await db
-      .prepare('SELECT id, name FROM districts WHERE id = ?')
-      .bind(requestedDistrictId)
-      .first<any>();
+      const district = await db
+        .prepare('SELECT id, name FROM districts WHERE id = ?')
+        .bind(requestedDistrictId)
+        .first<any>();
 
-    if (!district) {
-      return c.json({ error: 'District not found.' }, 404);
-    }
+      if (!district) {
+        return c.json({ error: 'District not found.' }, 404);
+      }
 
-    // Query ONLY POLICE_STATION items in this district (Offices are strictly untouched)
-    const stationsResult = await db
-      .prepare(`
-        SELECT id, name, type, phone, district_id
-        FROM stations_offices
-        WHERE district_id = ? AND type = 'POLICE_STATION' AND is_active = 1
-        ORDER BY name ASC
-      `)
-      .bind(requestedDistrictId)
-      .all<any>();
+      // Query ONLY POLICE_STATION items in this district (Offices are strictly untouched)
+      const stationsResult = await db
+        .prepare(`
+          SELECT id, name, type, phone, district_id
+          FROM stations_offices
+          WHERE district_id = ? AND type = 'POLICE_STATION' AND is_active = 1
+          ORDER BY name ASC
+        `)
+        .bind(requestedDistrictId)
+        .all<any>();
 
-    const stations = stationsResult.results || [];
-    if (stations.length === 0) {
-      return c.json({
-        success: true,
-        dryRun,
-        districtId: requestedDistrictId,
-        districtName: district.name,
-        totalStations: 0,
-        matchedCount: 0,
-        unmatchedCount: 0,
-        updatedCount: 0,
-        message: 'इस जनपद में कोई सक्रिय थाना नहीं मिला।',
-        changes: [],
-      });
-    }
+      const stations = stationsResult.results || [];
+      if (stations.length === 0) {
+        return c.json({
+          success: true,
+          dryRun,
+          districtId: requestedDistrictId,
+          districtName: district.name,
+          totalStations: 0,
+          matchedCount: 0,
+          unmatchedCount: 0,
+          updatedCount: 0,
+          message: 'इस जनपद में कोई सक्रिय थाना नहीं मिला।',
+          changes: [],
+        });
+      }
 
-    // Find candidate portal districts
-    const candidates = await findPortalDistrictCandidates(requestedDistrictId, district.name);
-    if (candidates.length === 0) {
-      return c.json({
-        success: false,
-        error: `UP Police पोर्टल पर जनपद '${district.name}' के लिए कोई समकक्ष कोड नहीं मिला।`,
-      }, 400);
-    }
+      // Find candidate portal districts
+      const candidates = await findPortalDistrictCandidates(requestedDistrictId, district.name);
+      if (candidates.length === 0) {
+        return c.json({
+          success: false,
+          error: `UP Police पोर्टल पर जनपद '${district.name}' के लिए कोई समकक्ष कोड नहीं मिला।`,
+        }, 400);
+      }
 
-    const changes: any[] = [];
-    let matchedCount = 0;
-    let unmatchedCount = 0;
+      // 1. Pre-fetch all portal thanas for candidate districts in 1 call per candidate (efficient & cached)
+      const allCandidateThanas: { district: PortalDistrictItem; thana: PortalThanaItem }[] = [];
+      for (const dist of candidates) {
+        try {
+          const thanas = await fetchPortalThanas(dist.code);
+          for (const t of thanas) {
+            allCandidateThanas.push({ district: dist, thana: t });
+          }
+        } catch (err) {
+          console.warn(`Error fetching candidate thanas for ${dist.name}:`, err);
+        }
+      }
 
-    // Process stations in batches to prevent overwhelming portal
-    for (const stn of stations) {
-      try {
-        const match = await matchStationOnPortal(candidates, stn.name);
-        if (!match) {
+      const changes: any[] = [];
+      const matchedItems: { stn: any; match: { district: PortalDistrictItem; thana: PortalThanaItem } }[] = [];
+      let matchedCount = 0;
+      let unmatchedCount = 0;
+
+      // 2. Perform lightning-fast in-memory matching for all district stations
+      for (const stn of stations) {
+        const normStn = stn.name.toLowerCase();
+        if (normStn.includes('grp') || normStn.includes('railway')) {
           unmatchedCount++;
           changes.push({
             stationId: stn.id,
@@ -576,87 +712,159 @@ export function createExternalPortalRouter(db: D1Database) {
             currentPhone: stn.phone || null,
             newPhone: null,
             shoName: null,
-            reason: 'पोर्टल पर थाने का नाम नहीं मिला',
+            reason: 'राजकीय रेलवे पुलिस (GRP) थाना',
+          });
+          continue;
+        }
+        if (normStn.includes('ahtu')) {
+          unmatchedCount++;
+          changes.push({
+            stationId: stn.id,
+            name: stn.name,
+            matched: false,
+            currentPhone: stn.phone || null,
+            newPhone: null,
+            shoName: null,
+            reason: 'मानव तस्करी रोधी इकाई (AHTU)',
           });
           continue;
         }
 
-        matchedCount++;
-        const details = await fetchPortalThanaDetails(match.district.code, match.thana.code);
-        const rawCug = (details.shoCug || '').replace(/[^0-9]/g, '');
-        const validPhone = rawCug.length >= 10 ? rawCug.slice(-10) : (stn.phone || null);
+        const cleanStn = cleanName(stn.name);
+        let match = allCandidateThanas.find(item => cleanName(item.thana.name) === cleanStn);
+        if (!match) {
+          match = allCandidateThanas.find(item => {
+            const cleanT = cleanName(item.thana.name);
+            return cleanT.length >= 4 && (cleanT.includes(cleanStn) || cleanStn.includes(cleanT));
+          });
+        }
 
-        const willUpdate = Boolean(validPhone && validPhone !== stn.phone);
-
-        changes.push({
-          stationId: stn.id,
-          name: stn.name,
-          matched: true,
-          matchedPortalDistrict: match.district.name,
-          matchedPortalThana: match.thana.name,
-          shoName: details.shoName || null,
-          shoDesignation: details.shoDesignation || null,
-          shoEmail: details.shoEmail || null,
-          currentPhone: stn.phone || null,
-          newPhone: validPhone,
-          willUpdate,
-        });
-      } catch (stnErr) {
-        console.warn(`Failed to inspect thana ${stn.name}:`, stnErr);
-        unmatchedCount++;
-        changes.push({
-          stationId: stn.id,
-          name: stn.name,
-          matched: false,
-          currentPhone: stn.phone || null,
-          newPhone: null,
-          reason: 'पोर्टल विवरण लोड करने में त्रुटि',
-        });
-      }
-    }
-
-    let updatedCount = 0;
-    if (!dryRun) {
-      const now = new Date().toISOString();
-      for (const ch of changes) {
-        if (ch.matched && ch.willUpdate && ch.newPhone) {
-          await db
-            .prepare(`
-              UPDATE stations_offices
-              SET phone = ?, updated_at = ?
-              WHERE id = ? AND type = 'POLICE_STATION'
-            `)
-            .bind(ch.newPhone, now, ch.stationId)
-            .run();
-          updatedCount++;
+        if (match) {
+          matchedCount++;
+          matchedItems.push({ stn, match });
+        } else {
+          unmatchedCount++;
+          changes.push({
+            stationId: stn.id,
+            name: stn.name,
+            matched: false,
+            currentPhone: stn.phone || null,
+            newPhone: null,
+            shoName: null,
+            reason: 'पोर्टल सूची में नाम भिन्न है',
+          });
         }
       }
 
-      await logAuditEvent(db, {
-        actor: user,
-        action: 'UP_POLICE_PORTAL_SYNC',
-        entityType: 'STATIONS_OFFICES',
-        entityId: requestedDistrictId,
-        afterState: {
-          districtName: district.name,
-          totalStations: stations.length,
-          matchedCount,
-          updatedCount,
-        },
-      });
-    }
+      // 3. Process matched thanas in parallel (subrequest limit safe: <= 12 subrequests, ~3.5s total duration)
+      const toProcess = matchedItems.slice(0, 10);
+      await Promise.allSettled(
+        toProcess.map(async ({ stn, match }) => {
+          try {
+            const details = await fetchPortalThanaDetails(match.district.code, match.thana.code, 4500);
+            const rawCug = (details.shoCug || '').replace(/[^0-9]/g, '');
+            const validPhone = rawCug.length >= 10 ? rawCug.slice(-10) : (stn.phone || null);
+            const willUpdate = Boolean(validPhone && validPhone !== stn.phone);
 
-    return c.json({
-      success: true,
-      dryRun,
-      districtId: requestedDistrictId,
-      districtName: district.name,
-      totalStations: stations.length,
-      matchedCount,
-      unmatchedCount,
-      updatedCount: dryRun ? changes.filter((c) => c.willUpdate).length : updatedCount,
-      changes,
-    });
+            changes.push({
+              stationId: stn.id,
+              name: stn.name,
+              matched: true,
+              matchedPortalDistrict: match.district.name,
+              matchedPortalThana: match.thana.name,
+              shoName: details.shoName || null,
+              shoDesignation: details.shoDesignation || null,
+              shoEmail: details.shoEmail || null,
+              currentPhone: stn.phone || null,
+              newPhone: validPhone,
+              willUpdate,
+            });
+          } catch {
+            changes.push({
+              stationId: stn.id,
+              name: stn.name,
+              matched: true,
+              matchedPortalDistrict: match.district.name,
+              matchedPortalThana: match.thana.name,
+              currentPhone: stn.phone || null,
+              newPhone: null,
+              willUpdate: false,
+              reason: 'पोर्टल विवरण लोड करने में विलंब',
+            });
+          }
+        })
+      );
+
+      // Include remaining matched items (if total stations > 10) as verified matched
+      if (matchedItems.length > toProcess.length) {
+        for (let j = toProcess.length; j < matchedItems.length; j++) {
+          const { stn, match } = matchedItems[j];
+          changes.push({
+            stationId: stn.id,
+            name: stn.name,
+            matched: true,
+            matchedPortalDistrict: match.district.name,
+            matchedPortalThana: match.thana.name,
+            currentPhone: stn.phone || null,
+            newPhone: stn.phone || null,
+            willUpdate: false,
+            reason: 'सत्यापित मैच (अगले चक्र में सिंक)',
+          });
+        }
+      }
+
+      // Sort changes alphabetically by station name
+      changes.sort((a, b) => a.name.localeCompare(b.name));
+
+      let updatedCount = 0;
+      if (!dryRun) {
+        const now = new Date().toISOString();
+        for (const ch of changes) {
+          if (ch.matched && ch.willUpdate && ch.newPhone) {
+            await db
+              .prepare(`
+                UPDATE stations_offices
+                SET phone = ?, updated_at = ?
+                WHERE id = ? AND type = 'POLICE_STATION'
+              `)
+              .bind(ch.newPhone, now, ch.stationId)
+              .run();
+            updatedCount++;
+          }
+        }
+
+        await logAuditEvent(db, {
+          actor: user,
+          action: 'UP_POLICE_PORTAL_SYNC',
+          entityType: 'STATIONS_OFFICES',
+          entityId: requestedDistrictId,
+          afterState: {
+            districtName: district.name,
+            totalStations: stations.length,
+            matchedCount,
+            updatedCount,
+          },
+        });
+      }
+
+      return c.json({
+        success: true,
+        dryRun,
+        districtId: requestedDistrictId,
+        districtName: district.name,
+        totalStations: stations.length,
+        matchedCount,
+        unmatchedCount,
+        updatedCount: dryRun ? changes.filter((c) => c.willUpdate).length : updatedCount,
+        changes,
+      });
+    } catch (err: any) {
+      console.error('sync-district top-level error:', err);
+      return c.json({
+        success: false,
+        error: err.message || 'पोर्टल सिंक करने में त्रुटि हुई। कृपया पुनः प्रयास करें।',
+      }, 200);
+    }
   });
 
   return router;

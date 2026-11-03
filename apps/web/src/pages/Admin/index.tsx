@@ -267,9 +267,6 @@ export const AdminDashboard: React.FC = () => {
     setPortalSyncResult(null);
     setPortalSyncError(null);
     setPortalSyncModalOpen(true);
-    if (defaultDist) {
-      handleRunPortalPreview(defaultDist);
-    }
   };
 
   const handleRunPortalPreview = async (distIdOverride?: string) => {
@@ -2258,16 +2255,16 @@ export const AdminDashboard: React.FC = () => {
                 <select
                   value={portalSyncDistrictId}
                   onChange={(e) => {
-                    const val = e.target.value;
-                    setPortalSyncDistrictId(val);
-                    if (val) handleRunPortalPreview(val);
+                    setPortalSyncDistrictId(e.target.value);
+                    setPortalSyncResult(null);
+                    setPortalSyncError(null);
                   }}
                   className="w-full min-h-[40px] px-3 py-2 rounded-xl border text-xs bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#147D84]"
                 >
                   <option value="">जनपद चुनें...</option>
                   {allDistricts.map((d) => (
                     <option key={d.id} value={d.id}>
-                      {d.name} ({d.stateCode})
+                      {d.name}{d.stateCode ? ` (${d.stateCode})` : ''}
                     </option>
                   ))}
                 </select>
